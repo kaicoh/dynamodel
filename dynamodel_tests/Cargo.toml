@@ -1,0 +1,12 @@
+[package]
+name = "dynamodel_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dynamodel = { path = "../dynamodel" }
+aws-sdk-dynamodb = { workspace = true }
+paste = { workspace = true }
+
+[dev-dependencies]
+trybuild = "1"

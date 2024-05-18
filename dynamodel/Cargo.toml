@@ -1,0 +1,9 @@
+[package]
+name = "dynamodel"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dynamodel_derive = { path = "../dynamodel_derive" }
+aws-sdk-dynamodb = { workspace = true }
+thiserror = "1"

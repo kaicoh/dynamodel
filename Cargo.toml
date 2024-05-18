@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = [
+    "dynamodel",
+    "dynamodel_derive",
+    "dynamodel_tests",
+]
+
+[patch.crates-io]
+dynamodel = { path = "dynamodel" }
+
+[workspace.dependencies]
+aws-sdk-dynamodb = "1"
+paste = "1"

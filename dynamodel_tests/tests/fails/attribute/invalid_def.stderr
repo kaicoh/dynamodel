@@ -1,0 +1,13 @@
+error: Unexpected meta-item format `literal`
+ --> tests/fails/attribute/invalid_def.rs:6:22
+  |
+6 |     #[dynamodel(into("from_vec_to_blob"))]
+  |                      ^^^^^^^^^^^^^^^^^^
+
+error: Missing field `path` at bytes/into
+ --> tests/fails/attribute/invalid_def.rs:4:10
+  |
+4 | #[derive(Dynamodel)]
+  |          ^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `Dynamodel` (in Nightly builds, run with -Z macro-backtrace for more info)
