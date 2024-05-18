@@ -1,4 +1,8 @@
-# Dynamodel
+# dynamodel
+
+[![Version](https://img.shields.io/crates/v/dynamodel)](https://crates.io/crates/dynamodel)
+[![License](https://img.shields.io/crates/l/dynamodel)](LICENSE)
+[![Test](https://img.shields.io/github/actions/workflow/status/kaicoh/dynamodel/test.yml)](https://github.com/kaicoh/dynamodel/actions/workflows/ci.yml)
 
 This library provide a derive macro to implement conversion between your struct and HashMap<String, AttributeValue>.
 
