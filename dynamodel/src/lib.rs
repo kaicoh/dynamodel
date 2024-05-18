@@ -129,6 +129,41 @@
 //! let converted: Person = item.try_into().unwrap();
 //! assert_eq!(converted, person);
 //! ```
+//!
+//! ### Field attribute `rename`
+//!
+//! You can also rename key using field attribute `rename`.
+//!
+//! ```rust
+//! use dynamodel::Dynamodel;
+//! # use std::collections::HashMap;
+//! # use aws_sdk_dynamodb::types::AttributeValue;
+//!
+//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
+//! struct Person {
+//!     // Use `rename` as field attribute.
+//!     #[dynamodel(rename = "GivenName")]
+//!     first_name: String,
+//!     #[dynamodel(rename = "FamilyName")]
+//!     last_name: String,
+//! }
+//!
+//! let person = Person {
+//!     first_name: "Kanji".into(),
+//!     last_name: "Tanaka".into(),
+//! };
+//!
+//! let item: HashMap<String, AttributeValue> = [
+//!     ("GivenName".to_string(), AttributeValue::S("Kanji".into())),
+//!     ("FamilyName".to_string(), AttributeValue::S("Tanaka".into())),
+//! ].into();
+//!
+//! let converted: HashMap<String, AttributeValue> = person.clone().into();
+//! assert_eq!(converted, item);
+//!
+//! let converted: Person = item.try_into().unwrap();
+//! assert_eq!(converted, person);
+//! ```
 
 /// Derive macro to implement conversion between your struct and
 /// [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.

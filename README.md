@@ -90,45 +90,80 @@ The function definition must satisfy these conditions.
 | `field type => AttributeValue` | `field type` | `AttributeValue` |
 | `AttributeValue => field type` | `&AttributeValue` | `Result<field type, ConvertError>` |
 
- ## Rename HashMap key
+## Rename HashMap key
 
- Like [serde crate](https://crates.io/crates/serde), you can rename
- HashMap key from your struct field name.
+Like [serde crate](https://crates.io/crates/serde), you can rename
+HashMap key from your struct field name.
 
- ### Container attribute `rename_all`
+### Container attribute `rename_all`
 
- The allowed values for `rename_all` attribute are `UPPERCASE`, `PascalCase`, `camelCase`,
- `SCREAMING_SNAKE_CASE`, `kebab-case` and `SCREAMING-KEBAB-CASE`.
+The allowed values for `rename_all` attribute are `UPPERCASE`, `PascalCase`, `camelCase`,
+`SCREAMING_SNAKE_CASE`, `kebab-case` and `SCREAMING-KEBAB-CASE`.
 
- ```rust
- use dynamodel::Dynamodel;
- use std::collections::HashMap;
- use aws_sdk_dynamodb::types::AttributeValue;
+```rust
+use dynamodel::Dynamodel;
+use std::collections::HashMap;
+use aws_sdk_dynamodb::types::AttributeValue;
 
- // Use `rename_all` as container attribute.
- #[derive(Dynamodel, Debug, Clone, PartialEq)]
- #[dynamodel(rename_all = "PascalCase")]
- struct Person {
-     first_name: String,
-     last_name: String,
- }
+// Use `rename_all` as container attribute.
+#[derive(Dynamodel, Debug, Clone, PartialEq)]
+#[dynamodel(rename_all = "PascalCase")]
+struct Person {
+    first_name: String,
+    last_name: String,
+}
 
- let person = Person {
-     first_name: "Kanji".into(),
-     last_name: "Tanaka".into(),
- };
+let person = Person {
+    first_name: "Kanji".into(),
+    last_name: "Tanaka".into(),
+};
 
- let item: HashMap<String, AttributeValue> = [
-     ("FirstName".to_string(), AttributeValue::S("Kanji".into())),
-     ("LastName".to_string(), AttributeValue::S("Tanaka".into())),
- ].into();
+let item: HashMap<String, AttributeValue> = [
+    ("FirstName".to_string(), AttributeValue::S("Kanji".into())),
+    ("LastName".to_string(), AttributeValue::S("Tanaka".into())),
+].into();
 
- let converted: HashMap<String, AttributeValue> = person.clone().into();
- assert_eq!(converted, item);
+let converted: HashMap<String, AttributeValue> = person.clone().into();
+assert_eq!(converted, item);
 
- let converted: Person = item.try_into().unwrap();
- assert_eq!(converted, person);
- ```
+let converted: Person = item.try_into().unwrap();
+assert_eq!(converted, person);
+```
+
+### Field attribute `rename`
+
+You can also rename key using field attribute `rename`.
+
+```rust
+use dynamodel::Dynamodel;
+# use std::collections::HashMap;
+# use aws_sdk_dynamodb::types::AttributeValue;
+
+#[derive(Dynamodel, Debug, Clone, PartialEq)]
+struct Person {
+    // Use `rename` as field attribute.
+    #[dynamodel(rename = "GivenName")]
+    first_name: String,
+    #[dynamodel(rename = "FamilyName")]
+    last_name: String,
+}
+
+let person = Person {
+    first_name: "Kanji".into(),
+    last_name: "Tanaka".into(),
+};
+
+let item: HashMap<String, AttributeValue> = [
+    ("GivenName".to_string(), AttributeValue::S("Kanji".into())),
+    ("FamilyName".to_string(), AttributeValue::S("Tanaka".into())),
+].into();
+
+let converted: HashMap<String, AttributeValue> = person.clone().into();
+assert_eq!(converted, item);
+
+let converted: Person = item.try_into().unwrap();
+assert_eq!(converted, person);
+```
 
 ## License
 
