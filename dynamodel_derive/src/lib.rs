@@ -1,9 +1,12 @@
+mod case;
 mod getter;
 mod setter;
 mod utils;
 
+use case::RenameRule;
 use darling::FromDeriveInput;
 use proc_macro::TokenStream;
+use proc_macro_error::proc_macro_error;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
@@ -14,6 +17,7 @@ use syn::{parse_macro_input, DeriveInput};
 struct TargetStruct {
     ident: syn::Ident,
     data: darling::ast::Data<(), utils::Field>,
+    rename_all: Option<syn::Expr>,
 }
 
 impl TargetStruct {
@@ -21,8 +25,10 @@ impl TargetStruct {
         let ident = self.ident;
         let fields = self.data.take_struct().unwrap().fields;
 
-        let setters = fields.iter().map(setter::token_stream);
-        let getters = fields.iter().map(getter::token_stream);
+        let rename_rule = self.rename_all.as_ref().map(RenameRule::new);
+
+        let setters = fields.iter().map(|f| setter::token_stream(f, &rename_rule));
+        let getters = fields.iter().map(|f| getter::token_stream(f, &rename_rule));
 
         quote! {
             impl ::std::convert::From<#ident> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> {
@@ -46,6 +52,7 @@ impl TargetStruct {
     }
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(Dynamodel, attributes(dynamodel))]
 pub fn derive_dynamodel(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

@@ -1,50 +1,50 @@
+use super::case::RenameRule;
 use super::utils::*;
 
 use proc_macro2::TokenStream;
 use quote::quote;
 
-pub fn token_stream(field: &Field) -> TokenStream {
+pub fn token_stream(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStream {
     let field_name = &field.ident;
     let ty = &field.ty;
+    let hash_key_token = hash_key_name(field, rename_rule);
+    let hash_key = quote! { stringify!(#hash_key_token).into() };
 
     if let Some(ref converter) = field.into {
         return quote! {
             let v = value.#field_name;
-            item.insert(
-                stringify!(#field_name).into(),
-                #converter(v),
-            );
+            item.insert(#hash_key, #converter(v));
         };
     }
 
     match inner_type_of("Option", ty) {
         Some(ty) => {
-            let attr = attribute_value_type(ty);
+            let variant = attribute_value_variant(ty);
 
             quote! {
                 if let Some(v) = value.#field_name {
                     item.insert(
-                        stringify!(#field_name).into(),
-                        aws_sdk_dynamodb::types::AttributeValue::#attr,
+                        #hash_key,
+                        aws_sdk_dynamodb::types::AttributeValue::#variant,
                     );
                 }
             }
         }
         None => {
-            let attr = attribute_value_type(ty);
+            let variant = attribute_value_variant(ty);
 
             quote! {
                 let v = value.#field_name;
                 item.insert(
-                    stringify!(#field_name).into(),
-                    aws_sdk_dynamodb::types::AttributeValue::#attr,
+                    #hash_key,
+                    aws_sdk_dynamodb::types::AttributeValue::#variant,
                 );
             }
         }
     }
 }
 
-fn attribute_value_type(ty: &syn::Type) -> TokenStream {
+fn attribute_value_variant(ty: &syn::Type) -> TokenStream {
     if is_string(ty) {
         // type is "String"
         return quote! { S(v) };

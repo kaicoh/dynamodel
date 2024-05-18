@@ -1,18 +1,21 @@
+use super::case::RenameRule;
 use super::utils::*;
 
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
-pub fn token_stream(field: &Field) -> TokenStream {
+pub fn token_stream(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStream {
     let field_name = &field.ident;
     let ty = &field.ty;
 
     let field_not_set = not_set_err(field_name);
 
+    let hash_key = hash_key_name(field, rename_rule);
+    let get_value = quote! { item.get(stringify!(#hash_key)) };
+
     if let Some(ref converter) = field.try_from {
         return quote! {
-            #field_name: item
-                .get(stringify!(#field_name))
+            #field_name: #get_value
                 .ok_or(#field_not_set)
                 .and_then(#converter)?
         };
@@ -23,8 +26,7 @@ pub fn token_stream(field: &Field) -> TokenStream {
             let into_value = from_attribute_value(ty);
 
             quote! {
-                #field_name: item
-                    .get(stringify!(#field_name))
+                #field_name: #get_value
                     .map(|v| { #into_value })
                     .transpose()?
             }
@@ -33,8 +35,7 @@ pub fn token_stream(field: &Field) -> TokenStream {
             let into_value = from_attribute_value(ty);
 
             quote! {
-                #field_name: item
-                    .get(stringify!(#field_name))
+                #field_name: #get_value
                     .ok_or(#field_not_set)
                     .and_then(|v| { #into_value })?
             }
