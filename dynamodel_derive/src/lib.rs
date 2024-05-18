@@ -6,7 +6,7 @@ mod utils;
 use case::RenameRule;
 use darling::FromDeriveInput;
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
@@ -18,6 +18,7 @@ struct TargetStruct {
     ident: syn::Ident,
     data: darling::ast::Data<(), utils::Field>,
     rename_all: Option<syn::Expr>,
+    table_key: Option<darling::Result<syn::Path>>,
 }
 
 impl TargetStruct {
@@ -30,11 +31,38 @@ impl TargetStruct {
         let setters = fields.iter().map(|f| setter::token_stream(f, &rename_rule));
         let getters = fields.iter().map(|f| getter::token_stream(f, &rename_rule));
 
+        let set_table_key = if self.table_key.is_some() {
+            quote! { item.extend(key); }
+        } else {
+            quote!()
+        };
+
+        let init_table_key = match self.table_key {
+            Some(Ok(path)) => {
+                quote! {
+                    let key: Self = #path(&value);
+                }
+            }
+            Some(Err(err)) => {
+                abort! {
+                    err.span(), "Invalid attribute #[dynamodel(table_key = ...)]";
+                    note = "Invalid argument for `table_key` attribute. Only paths are allowed.";
+                    help = "Try formating the argument like `path::to::function` or `\"path::to::function\"`";
+                }
+            }
+            None => quote!(),
+        };
+
         quote! {
             impl ::std::convert::From<#ident> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> {
                 fn from(value: #ident) -> Self {
+                    #init_table_key
+
                     let mut item: Self = ::std::collections::HashMap::new();
                     #(#setters)*
+
+                    #set_table_key
+
                     item
                 }
             }

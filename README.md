@@ -57,7 +57,7 @@ followings.
 
 ## Explicit conversion
 
-Using field attribute, you can implement original conversion methods like this.
+Using field attribute, you can implement original conversion methods for any types like this.
 
 ```rust
 use dynamodel::{Dynamodel, ConvertError};
@@ -163,6 +163,58 @@ assert_eq!(converted, item);
 
 let converted: Person = item.try_into().unwrap();
 assert_eq!(converted, person);
+```
+
+## Single-table design
+
+When you design your struct according to the
+[single-table design](https://aws.amazon.com/jp/blogs/compute/creating-a-single-table-design-with-amazon-dynamodb/),
+you want separate data storing in the struct and its talbe key.
+
+For example, the following diagram shows both `Video` and `VideoStats` are stored in the same
+table.
+
+![Videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table.png?raw=true)
+
+Using container attribute `table_key`, you can implement this structure.
+The `table_key` value must be a path for function whose argument is a reference of the struct's
+instance and its return type is HashMap<String, AttributeValue>.
+
+```rust
+use dynamodel::Dynamodel;
+use std::collections::HashMap;
+use aws_sdk_dynamodb::types::AttributeValue;
+
+#[derive(Dynamodel, Debug, Clone, PartialEq)]
+#[dynamodel(table_key = "VideoStats::key", rename_all = "PascalCase")]
+struct VideoStats {
+    id: String,
+    view_count: u64,
+}
+
+impl VideoStats {
+    fn key(&self) -> HashMap<String, AttributeValue> {
+        [
+            ("PK".to_string(), AttributeValue::S(self.id.clone())),
+            ("SK".to_string(), AttributeValue::S("VideoStats".into())),
+        ].into()
+    }
+}
+
+let stats = VideoStats {
+    id: "7cf27a02".into(),
+    view_count: 147,
+};
+
+let item: HashMap<String, AttributeValue> = [
+    ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
+    ("SK".to_string(), AttributeValue::S("VideoStats".into())),
+    ("Id".to_string(), AttributeValue::S("7cf27a02".into())),
+    ("ViewCount".to_string(), AttributeValue::N("147".into())),
+].into();
+
+let converted: HashMap<String, AttributeValue> = stats.into();
+assert_eq!(converted, item);
 ```
 
 ## License
