@@ -136,8 +136,8 @@ You can also rename key using field attribute `rename`.
 
 ```rust
 use dynamodel::Dynamodel;
-# use std::collections::HashMap;
-# use aws_sdk_dynamodb::types::AttributeValue;
+use std::collections::HashMap;
+use aws_sdk_dynamodb::types::AttributeValue;
 
 #[derive(Dynamodel, Debug, Clone, PartialEq)]
 struct Person {
