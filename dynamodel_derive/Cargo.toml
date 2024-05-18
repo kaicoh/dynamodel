@@ -1,7 +1,14 @@
 [package]
 name = "dynamodel_derive"
 version = "0.1.0"
+authors = ["Kanji Tanaka <sumireminami@gmail.com"]
+license = "MIT"
+description = "Macros 1.1 implementation of #[derive(Dynamodel)]"
+homepage = "https://github.com/kaicoh/dynamodel"
+repository = "https://github.com/kaicoh/dynamodel"
+keywords = ["dynamodb", "aws"]
 edition = "2021"
+readme = "../README.md"
 
 [lib]
 proc-macro = true

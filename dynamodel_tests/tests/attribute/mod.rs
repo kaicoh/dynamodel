@@ -3,7 +3,7 @@ use aws_sdk_dynamodb::primitives::Blob;
 
 #[derive(Debug, Dynamodel, PartialEq)]
 struct Model {
-    #[dynamodel(into(path = "to_blob"), try_from(path = "from_blob"))]
+    #[dynamodel(into = "to_blob", try_from = "from_blob")]
     bytes: Vec<u8>,
 }
 

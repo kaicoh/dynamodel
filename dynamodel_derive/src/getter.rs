@@ -9,9 +9,7 @@ pub fn token_stream(field: &Field) -> TokenStream {
 
     let field_not_set = not_set_err(field_name);
 
-    if let Some(ref c) = field.try_from {
-        let converter = &c.path;
-
+    if let Some(ref converter) = field.try_from {
         return quote! {
             #field_name: item
                 .get(stringify!(#field_name))

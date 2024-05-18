@@ -1,7 +1,14 @@
 [package]
 name = "dynamodel"
 version = "0.1.0"
+authors = ["Kanji Tanaka <sumireminami@gmail.com"]
+license = "MIT"
+description = "Implement conversion between your struct and Dynamodb item."
+homepage = "https://github.com/kaicoh/dynamodel"
+repository = "https://github.com/kaicoh/dynamodel"
+keywords = ["dynamodb", "aws"]
 edition = "2021"
+readme = "../README.md"
 
 [dependencies]
 dynamodel_derive = { path = "../dynamodel_derive" }

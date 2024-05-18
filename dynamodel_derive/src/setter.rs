@@ -7,8 +7,7 @@ pub fn token_stream(field: &Field) -> TokenStream {
     let field_name = &field.ident;
     let ty = &field.ty;
 
-    if let Some(ref c) = field.into {
-        let converter = &c.path;
+    if let Some(ref converter) = field.into {
         return quote! {
             let v = value.#field_name;
             item.insert(

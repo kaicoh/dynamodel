@@ -1,4 +1,4 @@
-use darling::{FromField, FromMeta};
+use darling::FromField;
 
 pub fn is_string(ty: &syn::Type) -> bool {
     type_is("String", ty)
@@ -107,11 +107,6 @@ pub struct Field {
     pub ident: Option<syn::Ident>,
     pub ty: syn::Type,
     pub attrs: Vec<syn::Attribute>,
-    pub into: Option<Converter>,
-    pub try_from: Option<Converter>,
-}
-
-#[derive(Debug, Clone, FromMeta)]
-pub struct Converter {
-    pub path: syn::Expr,
+    pub into: Option<syn::Expr>,
+    pub try_from: Option<syn::Expr>,
 }
