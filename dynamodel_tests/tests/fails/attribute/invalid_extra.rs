@@ -1,7 +1,7 @@
 use dynamodel::Dynamodel;
 
 #[derive(Dynamodel)]
-#[dynamodel(table_key = "unknown")]
+#[dynamodel(extra = "unknown")]
 struct Video {
     id: String,
     author: String,

@@ -18,7 +18,7 @@ struct TargetStruct {
     ident: syn::Ident,
     data: darling::ast::Data<(), utils::Field>,
     rename_all: Option<syn::Expr>,
-    table_key: Option<darling::Result<syn::Path>>,
+    extra: Option<darling::Result<syn::Path>>,
 }
 
 impl TargetStruct {
@@ -31,13 +31,13 @@ impl TargetStruct {
         let setters = fields.iter().map(|f| setter::token_stream(f, &rename_rule));
         let getters = fields.iter().map(|f| getter::token_stream(f, &rename_rule));
 
-        let set_table_key = if self.table_key.is_some() {
+        let set_extra = if self.extra.is_some() {
             quote! { item.extend(key); }
         } else {
             quote!()
         };
 
-        let init_table_key = match self.table_key {
+        let init_extra = match self.extra {
             Some(Ok(path)) => {
                 quote! {
                     let key: Self = #path(&value);
@@ -45,8 +45,8 @@ impl TargetStruct {
             }
             Some(Err(err)) => {
                 abort! {
-                    err.span(), "Invalid attribute #[dynamodel(table_key = ...)]";
-                    note = "Invalid argument for `table_key` attribute. Only paths are allowed.";
+                    err.span(), "Invalid attribute #[dynamodel(extra = ...)]";
+                    note = "Invalid argument for `extra` attribute. Only paths are allowed.";
                     help = "Try formating the argument like `path::to::function` or `\"path::to::function\"`";
                 }
             }
@@ -56,12 +56,12 @@ impl TargetStruct {
         quote! {
             impl ::std::convert::From<#ident> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> {
                 fn from(value: #ident) -> Self {
-                    #init_table_key
+                    #init_extra
 
                     let mut item: Self = ::std::collections::HashMap::new();
                     #(#setters)*
 
-                    #set_table_key
+                    #set_extra
 
                     item
                 }

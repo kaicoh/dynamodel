@@ -165,19 +165,19 @@
 //! assert_eq!(converted, person);
 //! ```
 //!
-//! ## Single-table design
+//! ## Extra key-value pair for HashMap
 //!
-//! When you design your struct according to the
+//! If you design your struct according to the
 //! [single-table design](https://aws.amazon.com/jp/blogs/compute/creating-a-single-table-design-with-amazon-dynamodb/),
-//! you want separate data storing in the struct and its talbe key.
+//! you want set additional key-value sets to the [HashMap](std::collections::HashMap) sometimes.
 //!
 //! For example, the following diagram shows both `Video` and `VideoStats` are stored in the same
 //! table.
 //!
 //! ![Videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table.png?raw=true)
 //!
-//! Using container attribute `table_key`, you can implement this structure.
-//! The `table_key` value must be a path for function whose argument is a reference of the struct's
+//! Using container attribute `extra`, you can implement this structure.
+//! The `extra` value must be a path for function whose argument is a reference of the struct's
 //! instance and its return type is [HashMap](std::collections::HashMap)<[String],
 //! [AttributeValue]>.
 //!
@@ -187,16 +187,16 @@
 //! # use aws_sdk_dynamodb::types::AttributeValue;
 //!
 //! #[derive(Dynamodel, Debug, Clone, PartialEq)]
-//! #[dynamodel(table_key = "VideoStats::key", rename_all = "PascalCase")]
+//! #[dynamodel(extra = "VideoStats::sort_key", rename_all = "PascalCase")]
 //! struct VideoStats {
+//!     #[dynamodel(rename = "PK")]
 //!     id: String,
 //!     view_count: u64,
 //! }
 //!
 //! impl VideoStats {
-//!     fn key(&self) -> HashMap<String, AttributeValue> {
+//!     fn sort_key(&self) -> HashMap<String, AttributeValue> {
 //!         [
-//!             ("PK".to_string(), AttributeValue::S(self.id.clone())),
 //!             ("SK".to_string(), AttributeValue::S("VideoStats".into())),
 //!         ].into()
 //!     }
@@ -210,7 +210,6 @@
 //! let item: HashMap<String, AttributeValue> = [
 //!     ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
 //!     ("SK".to_string(), AttributeValue::S("VideoStats".into())),
-//!     ("Id".to_string(), AttributeValue::S("7cf27a02".into())),
 //!     ("ViewCount".to_string(), AttributeValue::N("147".into())),
 //! ].into();
 //!
