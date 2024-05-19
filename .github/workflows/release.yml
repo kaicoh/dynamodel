@@ -35,7 +35,7 @@ jobs:
           override: true
 
       - name: Publish derive library
-        run: cd dynamodel_derive && cargo publish --all-features --token ${{ secrets.CARGO_TOKEN }}
+        run: cargo publish -p dynamodel_derive --all-features --token ${{ secrets.CARGO_TOKEN }}
 
       - name: Publish library
-        run: cd ../dynamodel && cargo publish --all-features --token ${{ secrets.CARGO_TOKEN }}
+        run: cargo publish -p dynamodel --all-features --token ${{ secrets.CARGO_TOKEN }}
