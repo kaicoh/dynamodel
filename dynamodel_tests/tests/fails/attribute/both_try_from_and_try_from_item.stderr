@@ -1,0 +1,9 @@
+error: Invalid attribute #[dynamodel(try_from = ..., try_from_item = ...)]
+
+         = note: Either `try_from` or `try_from_item` can be set.
+         = help: Try removing either `try_from` or `try_from_item`.
+
+ --> tests/fails/attribute/both_try_from_and_try_from_item.rs:5:5
+  |
+5 |     #[dynamodel(try_from = "foo", try_from_item = "bar")]
+  |     ^

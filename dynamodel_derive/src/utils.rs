@@ -129,4 +129,6 @@ pub struct Field {
     pub into: Option<syn::Expr>,
     pub try_from: Option<syn::Expr>,
     pub rename: Option<String>,
+    pub skip_into: Option<bool>,
+    pub try_from_item: Option<syn::Expr>,
 }
