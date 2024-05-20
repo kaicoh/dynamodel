@@ -220,6 +220,89 @@ let converted: HashMap<String, AttributeValue> = stats.into();
 assert_eq!(converted, item);
 ```
 
+## Skip setting key-value pair to HashMap and get field value from HashMap itself
+
+For example, suppose you want to add `VideoComment` sortable by timestamp like this.
+
+![Videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table_2.png?raw=true)
+
+And the struct is following.
+
+```rust
+struct VideoComment {
+    id: String,
+    content: String,
+    timestamp: String,
+}
+```
+
+This time, when converting from Struct to HashMap you must not set `timestamp` as key,
+but when converting from HashMap to Struct, you must set `timestamp` field from the sort key.
+
+In this case, you can use `skip_into` and `try_from_item` attributes. The field having
+`skip_into` attribute is ignored when setting key-value pair to HashMap and the one having
+`try_from_item` attribute can be set its value from HashMap itself not from AttributeValue
+like `try_from` attribute.
+
+| Field Attribute | Argument | Return |
+|---|---|---|
+| `try_from` | `&AttributeValue` | `Result<field type, ConvertError>` |
+| `try_from_item` | `&HashMap<String, AttributeValue>` | `Result<field type, ConvertError>` |
+
+```rust
+use dynamodel::{Dynamodel, ConvertError};
+use std::collections::HashMap;
+use aws_sdk_dynamodb::types::AttributeValue;
+
+#[derive(Dynamodel, Debug, Clone, PartialEq)]
+#[dynamodel(extra = "VideoComment::sort_key")]
+struct VideoComment {
+    #[dynamodel(rename = "PK")]
+    id: String,
+    content: String,
+    // Using `skip_into` attribute, you can skip setting `timestamp` value to HashMap
+    // and `try_from_item` attribute enables retrieving field value from HashMap itself.
+    #[dynamodel(skip_into, try_from_item = "get_timestamp")]
+    timestamp: String
+}
+
+impl VideoComment {
+    fn sort_key(&self) -> HashMap<String, AttributeValue> {
+        [
+            (
+                "SK".to_string(),
+                AttributeValue::S(format!("VideoComment#{}", self.timestamp)),
+            ),
+        ].into()
+    }
+}
+
+fn get_timestamp(item: &HashMap<String, AttributeValue>) -> Result<String, ConvertError> {
+    item.get("SK")
+        .ok_or(ConvertError::FieldNotSet("SK".into()))
+        .and_then(|v| v.as_s().map_err(|e| ConvertError::AttributeValueUnmatched("S".into(), e.clone())))
+        .map(|v| v.split('#').last().unwrap().to_string())
+}
+
+let comment = VideoComment {
+    id: "7cf27a02".into(),
+    content: "Good video!".into(),
+    timestamp: "2023-04-05T12:34:56".into(),
+};
+
+let item: HashMap<String, AttributeValue> = [
+    ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
+    ("SK".to_string(), AttributeValue::S("VideoComment#2023-04-05T12:34:56".into())),
+    ("content".to_string(), AttributeValue::S("Good video!".into())),
+].into();
+
+let converted: HashMap<String, AttributeValue> = comment.clone().into();
+assert_eq!(converted, item);
+
+let converted: VideoComment = item.try_into().unwrap();
+assert_eq!(converted, comment);
+```
+
 ## License
 
 This software is released under the [MIT License](LICENSE).
