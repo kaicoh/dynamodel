@@ -12,8 +12,9 @@ use syn::{parse_macro_input, DeriveInput};
 
 // The main struct we get from parsing the attributes
 // The "supports(struct_named)" attribute guarantees only named structs to work with this macro
+// Ref: https://github.com/TedDriggs/darling?tab=readme-ov-file#shape-validation
 #[derive(Debug, FromDeriveInput)]
-#[darling(attributes(dynamodel), supports(struct_named))]
+#[darling(attributes(dynamodel), supports(struct_named, enum_named))]
 struct TargetStruct {
     ident: syn::Ident,
     data: darling::ast::Data<(), utils::Field>,
