@@ -234,11 +234,12 @@
 //! ```
 //!
 //! This time, when converting from Struct to HashMap you must not set `timestamp` as key,
-//! but when converting from HashMap to Struct, you must set timestamp field from sort key.
+//! but when converting from HashMap to Struct, you must set `timestamp` field from sort key.
 //!
-//! In this case, you can use `skip_into` and `try_from_item` attribute. The field having
+//! In this case, you can use `skip_into` and `try_from_item` attributes. The field having
 //! `skip_into` attribute is ignored when setting key-value pair to HashMap and the one having
-//! `try_from_item` attribute can be set its value from HashMap itself not an AttributeValue.
+//! `try_from_item` attribute can be set its value from HashMap itself not from AttributeValue
+//! like `try_from` attribute.
 //!
 //! | Field Attribute | Argument | Return |
 //! |---|---|---|
