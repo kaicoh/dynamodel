@@ -1,5 +1,5 @@
 error: Unsupported shape `one unnamed field`. Expected named fields.
- --> tests/fails/struct_newtype.rs:3:10
+ --> tests/ui/fails/struct_newtype.rs:3:10
   |
 3 | #[derive(Dynamodel)]
   |          ^^^^^^^^^

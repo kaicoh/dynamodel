@@ -1,5 +1,5 @@
-error: Unsupported shape `one unnamed field`. Expected named fields.
- --> tests/fails/enum_newtype.rs:3:10
+error: Unsupported shape `unnamed fields`. Expected named fields.
+ --> tests/ui/fails/struct_tuple.rs:3:10
   |
 3 | #[derive(Dynamodel)]
   |          ^^^^^^^^^

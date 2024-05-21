@@ -1,5 +1,5 @@
 error: Unsupported shape `no fields`. Expected named fields.
- --> tests/fails/struct_unit.rs:3:10
+ --> tests/ui/fails/enum_unit.rs:3:10
   |
 3 | #[derive(Dynamodel)]
   |          ^^^^^^^^^

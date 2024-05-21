@@ -11,6 +11,13 @@ pub fn token_stream(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStr
     let field_not_set = not_set_err(field_name);
 
     let hash_key = hash_key_name(field, rename_rule);
+
+    if let Some(ref converter) = field.try_from_item {
+        return quote! {
+            #field_name: #converter(&item)?
+        };
+    }
+
     let get_value = quote! { item.get(stringify!(#hash_key)) };
 
     if let Some(ref converter) = field.try_from {
