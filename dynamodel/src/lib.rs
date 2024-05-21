@@ -327,6 +327,10 @@ pub enum ConvertError {
     #[error("{0}")]
     ParseFloat(#[from] ParseFloatError),
 
+    /// Not found any variant when parsing HashMap from enum.
+    #[error("not found any variant in hashmap")]
+    VariantNotFound,
+
     /// Any error when converting. You can use this wrapper to implement your original conversion
     /// methods.
     #[error(transparent)]

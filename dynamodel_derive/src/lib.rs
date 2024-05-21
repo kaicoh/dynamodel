@@ -1,6 +1,6 @@
 mod case;
-mod getter;
-mod setter;
+mod enum_impl;
+mod struct_impl;
 mod utils;
 
 use case::RenameRule;
@@ -18,9 +18,10 @@ use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 struct TargetStruct {
     ident: syn::Ident,
     generics: syn::Generics,
-    data: darling::ast::Data<(), WithOriginal<utils::Field, syn::Field>>,
+    data: darling::ast::Data<utils::Variant, WithOriginal<utils::Field, syn::Field>>,
     rename_all: Option<syn::Expr>,
     extra: Option<darling::Result<syn::Path>>,
+    tag: Option<String>,
 }
 
 impl TargetStruct {
@@ -41,7 +42,7 @@ impl TargetStruct {
         Ok(self)
     }
 
-    fn token_stream(self) -> TokenStream {
+    fn token_stream_struct(self) -> TokenStream {
         let ident = self.ident;
         let (imp, ty, whr) = self.generics.split_for_impl();
         let fields = self.data.take_struct().unwrap().fields;
@@ -52,13 +53,13 @@ impl TargetStruct {
             if f.parsed.skip_into.is_some_and(|v| v) {
                 None
             } else {
-                Some(setter::token_stream(&f.parsed, &rename_rule))
+                Some(struct_impl::setter::token_stream(&f.parsed, &rename_rule))
             }
         });
 
         let getters = fields
             .iter()
-            .map(|f| getter::token_stream(&f.parsed, &rename_rule));
+            .map(|f| struct_impl::getter::token_stream(&f.parsed, &rename_rule));
 
         let set_extra = if self.extra.is_some() {
             quote! { item.extend(key); }
@@ -106,6 +107,115 @@ impl TargetStruct {
                 }
             }
         }.into()
+    }
+
+    fn token_stream_enum(self) -> TokenStream {
+        let ident = self.ident;
+        let (imp, ty, whr) = self.generics.split_for_impl();
+        let variants = self.data.take_enum().unwrap();
+
+        let set_tag: Box<dyn Fn(&syn::Ident) -> proc_macro2::TokenStream> =
+            if let Some(ref tag) = self.tag {
+                let tag = utils::token_from_str(tag);
+
+                Box::new(move |i: &syn::Ident| {
+                    quote! {
+                        outer = item;
+                        outer.insert(
+                            stringify!(#tag).into(),
+                            ::aws_sdk_dynamodb::types::AttributeValue::S(stringify!(#i).into()),
+                        );
+                    }
+                })
+            } else {
+                Box::new(|i: &syn::Ident| {
+                    quote! {
+                        outer.insert(
+                            stringify!(#i).into(),
+                            ::aws_sdk_dynamodb::types::AttributeValue::M(item),
+                        );
+                    }
+                })
+            };
+
+        let setter_branches = variants
+            .iter()
+            .map(enum_impl::setter::branch_token(set_tag));
+
+        let getter_branches = variants.iter().map(enum_impl::getter::branch_token);
+
+        let get_variant = if let Some(ref tag) = self.tag {
+            let tag = utils::token_from_str(tag);
+
+            quote! {
+                let tag = item
+                    .get(stringify!(#tag))
+                    .ok_or(::dynamodel::ConvertError::FieldNotSet(stringify!(#tag).into()))
+                    .and_then(|v| {
+                        v.as_s().map_err(|e| {
+                            ::dynamodel::ConvertError::AttributeValueUnmatched("S".into(), e.clone())
+                        })
+                    })
+                    .map(|v| v.clone())?;
+
+                match tag.as_str() {
+                    #(#getter_branches,)*
+                    _ => {},
+                }
+
+                Err(::dynamodel::ConvertError::VariantNotFound)
+            }
+        } else {
+            let tag_names = variants.iter().map(|v| {
+                let tag = &v.ident;
+                quote! { stringify!(#tag) }
+            });
+
+            quote! {
+                let tags = vec![#(#tag_names,)*];
+
+                for tag in tags {
+                    if let Some(::aws_sdk_dynamodb::types::AttributeValue::M(ref item)) = item.get(tag) {
+                        match tag {
+                            #(#getter_branches,)*
+                            _ => {},
+                        }
+                    }
+                }
+
+                Err(::dynamodel::ConvertError::VariantNotFound)
+            }
+        };
+
+        quote! {
+            impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
+                fn from(value: #ident #ty) -> Self {
+                    let mut outer: Self = ::std::collections::HashMap::new();
+                    let mut item: Self = ::std::collections::HashMap::new();
+
+                    match value {
+                        #(#ident::#setter_branches)*
+                    }
+
+                    outer
+                }
+            }
+
+            impl #imp ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident #ty #whr {
+                type Error = ::dynamodel::ConvertError;
+
+                fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
+                    #get_variant
+                }
+            }
+        }.into()
+    }
+
+    fn token_stream(self) -> TokenStream {
+        match self.data {
+            darling::ast::Data::Struct(_) => self.token_stream_struct(),
+            darling::ast::Data::Enum(_) => self.token_stream_enum(),
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use super::case::RenameRule;
-use darling::FromField;
+use darling::{FromField, FromVariant};
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
@@ -104,17 +104,21 @@ macro_rules! type_is_vec_fn {
 
 type_is_vec_fn!(is_string, is_bool, is_number);
 
+pub fn token_from_str(value: &String) -> TokenStream {
+    value.to_owned().parse().unwrap()
+}
+
 pub fn hash_key_name(field: &Field, rule: &Option<RenameRule>) -> TokenStream {
     let field_name = &field.ident;
 
     if let Some(ref renamed_field) = field.rename {
-        return renamed_field.to_owned().parse().unwrap();
+        return token_from_str(renamed_field);
     }
 
     if let Some(ref rule) = rule {
         let field_name_str = field_name.to_token_stream().to_string();
         let renamed_field = rule.apply(&field_name_str);
-        renamed_field.parse().unwrap()
+        token_from_str(&renamed_field)
     } else {
         quote!(#field_name)
     }
@@ -131,4 +135,12 @@ pub struct Field {
     pub rename: Option<String>,
     pub skip_into: Option<bool>,
     pub try_from_item: Option<syn::Expr>,
+}
+
+#[derive(Debug, FromVariant, Clone)]
+#[darling(attributes(dynamodel))]
+pub struct Variant {
+    pub ident: syn::Ident,
+    pub attrs: Vec<syn::Attribute>,
+    pub fields: darling::ast::Fields<Field>,
 }
