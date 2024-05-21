@@ -1,5 +1,5 @@
 error: Unexpected meta-item format `list`
- --> tests/fails/attribute/invalid_def.rs:6:17
+ --> tests/ui/fails/attribute/invalid_def.rs:6:17
   |
 6 |     #[dynamodel(into("from_vec_to_blob"))]
   |                 ^^^^
