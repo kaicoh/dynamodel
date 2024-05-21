@@ -17,6 +17,7 @@ use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 #[darling(and_then = "TargetStruct::validate")]
 struct TargetStruct {
     ident: syn::Ident,
+    generics: syn::Generics,
     data: darling::ast::Data<(), WithOriginal<utils::Field, syn::Field>>,
     rename_all: Option<syn::Expr>,
     extra: Option<darling::Result<syn::Path>>,
@@ -42,6 +43,7 @@ impl TargetStruct {
 
     fn token_stream(self) -> TokenStream {
         let ident = self.ident;
+        let (imp, ty, whr) = self.generics.split_for_impl();
         let fields = self.data.take_struct().unwrap().fields;
 
         let rename_rule = self.rename_all.as_ref().map(RenameRule::new);
@@ -81,8 +83,8 @@ impl TargetStruct {
         };
 
         quote! {
-            impl ::std::convert::From<#ident> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> {
-                fn from(value: #ident) -> Self {
+            impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
+                fn from(value: #ident #ty) -> Self {
                     #init_extra
 
                     let mut item: Self = ::std::collections::HashMap::new();
@@ -94,7 +96,7 @@ impl TargetStruct {
                 }
             }
 
-            impl ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident {
+            impl #imp ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident #ty #whr {
                 type Error = ::dynamodel::ConvertError;
 
                 fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
