@@ -5,8 +5,4 @@ use std::collections::HashMap;
 #[macro_use]
 mod macros;
 
-mod attribute;
-mod bool;
-mod inner_struct;
-mod number;
-mod string;
+mod fields;

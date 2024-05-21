@@ -25,6 +25,7 @@ macro_rules! assert_field_not_set {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_parse_int {
     ($result:expr $(,)?) => {
         match $result {
@@ -37,6 +38,7 @@ macro_rules! assert_parse_int {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_parse_float {
     ($result:expr $(,)?) => {
         match $result {
