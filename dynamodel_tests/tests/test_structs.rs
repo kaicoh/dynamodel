@@ -5,4 +5,4 @@ use std::collections::HashMap;
 #[macro_use]
 mod macros;
 
-mod fields;
+mod structs;

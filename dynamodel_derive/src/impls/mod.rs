@@ -1,31 +1,61 @@
-use super::utils::*;
+use super::{case::RenameRule, utils::*};
 
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 
-pub fn branch_token(variant: &Variant) -> TokenStream {
-    let name = &variant.ident;
-    let fields = &variant.fields.fields;
+pub mod enums;
+pub mod structs;
 
-    let field_getters = fields.iter().map(|f| {
-        let field_name = &f.ident;
-        let ty = &f.ty;
-        let field_not_set = not_set_err(field_name);
-        let into_value = from_attribute_value(ty);
-
-        quote! {
-            #field_name: item
-                .get(stringify!(#field_name))
-                .ok_or(#field_not_set)
-                .and_then(|v| { #into_value })?
-        }
-    });
-
-    quote! {
-        stringify!(#name) => {
-            return Ok(Self::#name { #(#field_getters,)* });
-        }
+fn into_attribute_value(ty: &syn::Type, token: TokenStream) -> TokenStream {
+    if is_string(ty) {
+        return quote! { S(#token) };
     }
+
+    if is_bool(ty) {
+        return quote! { Bool(#token) };
+    }
+
+    if is_number(ty) {
+        return quote! { N(#token.to_string()) };
+    }
+
+    if is_string_vec(ty) {
+        return quote! {
+            L(#token
+              .into_iter()
+              .map(::aws_sdk_dynamodb::types::AttributeValue::S)
+              .collect())
+        };
+    }
+
+    if is_bool_vec(ty) {
+        return quote! {
+            L(#token
+              .into_iter()
+              .map(::aws_sdk_dynamodb::types::AttributeValue::Bool)
+              .collect())
+        };
+    }
+
+    if is_number_vec(ty) {
+        return quote! {
+            L(#token
+              .into_iter()
+              .map(|v| ::aws_sdk_dynamodb::types::AttributeValue::N(v.to_string()))
+              .collect())
+        };
+    }
+
+    if is_any_vec(ty) {
+        return quote! {
+            L(#token
+              .into_iter()
+              .map(|v| ::aws_sdk_dynamodb::types::AttributeValue::M(v.into()))
+              .collect())
+        };
+    }
+
+    quote! { M(#token.into()) }
 }
 
 fn from_attribute_value(ty: &syn::Type) -> TokenStream {
@@ -162,3 +192,104 @@ fn l_wrapper(ty: &impl ToTokens, token: TokenStream) -> TokenStream {
         })
     }
 }
+
+fn is_string(ty: &syn::Type) -> bool {
+    type_is("String", ty)
+}
+
+fn is_number(ty: &syn::Type) -> bool {
+    is_u8(ty)
+        || is_u16(ty)
+        || is_u32(ty)
+        || is_u64(ty)
+        || is_u128(ty)
+        || is_usize(ty)
+        || is_i8(ty)
+        || is_i16(ty)
+        || is_i32(ty)
+        || is_i64(ty)
+        || is_i128(ty)
+        || is_isize(ty)
+        || is_f32(ty)
+        || is_f64(ty)
+}
+
+fn is_any_vec(ty: &syn::Type) -> bool {
+    type_is("Vec", ty)
+}
+
+fn type_is(literal: &str, ty: &syn::Type) -> bool {
+    if let syn::Type::Path(syn::TypePath {
+        path: syn::Path { ref segments, .. },
+        ..
+    }) = ty
+    {
+        if segments[0].ident == literal {
+            return true;
+        }
+    }
+    false
+}
+
+fn inner_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(syn::TypePath {
+        path: syn::Path { ref segments, .. },
+        ..
+    }) = ty
+    {
+        if let syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+            ref args,
+            ..
+        }) = segments[0].arguments
+        {
+            let ty = match args[0] {
+                syn::GenericArgument::Type(ref t) => Some(t),
+                _ => None,
+            };
+            return ty;
+        }
+    }
+    None
+}
+
+fn inner_type_of<'a>(literal: &str, ty: &'a syn::Type) -> Option<&'a syn::Type> {
+    if !type_is(literal, ty) {
+        return None;
+    }
+    inner_type(ty)
+}
+
+macro_rules! type_is_fn {
+    ($($ty:ty),*) => {
+        $(
+            paste::item! {
+                fn [<is_$ty>](ty: &syn::Type) -> bool {
+                    type_is(stringify!($ty), ty)
+                }
+            }
+         )*
+    }
+}
+
+type_is_fn!(bool, u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64);
+
+macro_rules! type_is_vec_fn {
+    ($($ident:ident),*) => {
+        $(
+            paste::item! {
+                pub fn [<$ident _vec>](ty: &syn::Type) -> bool {
+                    if !type_is("Vec", ty) {
+                        return false;
+                    }
+
+                    match inner_type(ty) {
+                        Some(ty) => $ident(ty),
+                        None => false,
+                    }
+                }
+            }
+         )*
+    }
+}
+
+type_is_vec_fn!(is_string, is_bool, is_number);

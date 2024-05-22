@@ -1,6 +1,5 @@
 mod case;
-mod enum_impl;
-mod struct_impl;
+mod impls;
 mod utils;
 
 use case::RenameRule;
@@ -44,25 +43,24 @@ impl TargetStruct {
 
     fn token_stream_struct(self) -> TokenStream {
         let ident = self.ident;
+        let rename_rule = self.rename_all.as_ref().map(RenameRule::new);
         let (imp, ty, whr) = self.generics.split_for_impl();
         let fields = self.data.take_struct().unwrap().fields;
-
-        let rename_rule = self.rename_all.as_ref().map(RenameRule::new);
 
         let setters = fields.iter().filter_map(|f| {
             if f.parsed.skip_into.is_some_and(|v| v) {
                 None
             } else {
-                Some(struct_impl::setter::token_stream(&f.parsed, &rename_rule))
+                Some(impls::structs::setter_token(&f.parsed, &rename_rule))
             }
         });
 
         let getters = fields
             .iter()
-            .map(|f| struct_impl::getter::token_stream(&f.parsed, &rename_rule));
+            .map(|f| impls::structs::getter_token(&f.parsed, &rename_rule));
 
         let set_extra = if self.extra.is_some() {
-            quote! { item.extend(key); }
+            quote! { item.extend(extra_item); }
         } else {
             quote!()
         };
@@ -70,7 +68,7 @@ impl TargetStruct {
         let init_extra = match self.extra {
             Some(Ok(path)) => {
                 quote! {
-                    let key: Self = #path(&value);
+                    let extra_item: Self = #path(&value);
                 }
             }
             Some(Err(err)) => {
@@ -138,11 +136,8 @@ impl TargetStruct {
                 })
             };
 
-        let setter_branches = variants
-            .iter()
-            .map(enum_impl::setter::branch_token(set_tag));
-
-        let getter_branches = variants.iter().map(enum_impl::getter::branch_token);
+        let setter_branches = variants.iter().map(impls::enums::setter_branch(set_tag));
+        let getter_branches = variants.iter().map(impls::enums::getter_branch);
 
         let get_variant = if let Some(ref tag) = self.tag {
             let tag = utils::token_from_str(tag);
@@ -166,20 +161,23 @@ impl TargetStruct {
                 Err(::dynamodel::ConvertError::VariantNotFound)
             }
         } else {
-            let tag_names = variants.iter().map(|v| {
-                let tag = &v.ident;
-                quote! { stringify!(#tag) }
-            });
+            let tag_names = variants.iter().map(|v| quote!(stringify!(#v)));
 
             quote! {
                 let tags = vec![#(#tag_names,)*];
 
                 for tag in tags {
-                    if let Some(::aws_sdk_dynamodb::types::AttributeValue::M(ref item)) = item.get(tag) {
-                        match tag {
-                            #(#getter_branches,)*
-                            _ => {},
+                    match item.get(tag) {
+                        Some(::aws_sdk_dynamodb::types::AttributeValue::M(ref item)) => {
+                            match tag {
+                                #(#getter_branches,)*
+                                _ => {},
+                            }
                         }
+                        Some(err) => {
+                            return Err(::dynamodel::ConvertError::AttributeValueUnmatched("M".into(), err.clone()));
+                        }
+                        None => {}
                     }
                 }
 
