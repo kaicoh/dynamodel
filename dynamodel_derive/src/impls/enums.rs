@@ -1,49 +1,147 @@
 use super::*;
 
-pub fn getter_branch(variant: &Variant) -> TokenStream {
-    let name = &variant.ident;
-    let fields = &variant.fields.fields;
+pub fn try_from_hashmap(
+    tag: &Option<String>,
+    rule: &RenameRule,
+    variants: &[Variant],
+) -> TokenStream {
+    let getter_branches = variants.iter().map(getter_branch(rule));
 
-    let field_getters = fields.iter().map(|f| {
-        let field_name = &f.ident;
-        let ty = &f.ty;
-        let field_not_set = not_set_err(field_name);
+    if let Some(ref tag) = tag {
+        let tag = token_from_str(tag);
 
-        match inner_type_of("Option", ty) {
-            Some(ty) => {
-                let into_value = from_attribute_value(ty);
+        quote! {
+            let tag = item
+                .get(stringify!(#tag))
+                .ok_or(::dynamodel::ConvertError::FieldNotSet(stringify!(#tag).into()))
+                .and_then(|v| {
+                    v.as_s().map_err(|e| {
+                        ::dynamodel::ConvertError::AttributeValueUnmatched("S".into(), e.clone())
+                    })
+                })
+                .map(|v| v.clone())?;
 
-                quote! {
-                    #field_name: item
-                        .get(stringify!(#field_name))
-                        .map(|v| { #into_value })
-                        .transpose()?
-                }
+            match tag.as_str() {
+                #(#getter_branches,)*
+                _ => {},
             }
-            None => {
-                let into_value = from_attribute_value(ty);
 
-                quote! {
-                    #field_name: item
-                        .get(stringify!(#field_name))
-                        .ok_or(#field_not_set)
-                        .and_then(|v| { #into_value })?
-                }
-            }
+            Err(::dynamodel::ConvertError::VariantNotFound)
         }
-    });
+    } else {
+        let tag_names = variants.iter().map(|v| {
+            let renamed = v.renamed(rule);
+            quote!(stringify!(#renamed))
+        });
 
-    quote! {
-        stringify!(#name) => {
-            return Ok(Self::#name { #(#field_getters,)* });
+        quote! {
+            let tags = vec![#(#tag_names,)*];
+
+            for tag in tags {
+                match item.get(tag) {
+                    Some(::aws_sdk_dynamodb::types::AttributeValue::M(ref item)) => {
+                        match tag {
+                            #(#getter_branches,)*
+                            _ => {},
+                        }
+                    }
+                    Some(err) => {
+                        return Err(::dynamodel::ConvertError::AttributeValueUnmatched("M".into(), err.clone()));
+                    }
+                    None => {}
+                }
+            }
+
+            Err(::dynamodel::ConvertError::VariantNotFound)
         }
     }
 }
 
-pub fn setter_branch<T>(set_tag: T) -> Box<dyn Fn(&Variant) -> TokenStream>
-where
-    T: Fn(&syn::Ident) -> TokenStream + 'static,
-{
+fn getter_branch(rule: &RenameRule) -> Box<dyn Fn(&Variant) -> TokenStream> {
+    let rule = *rule;
+
+    Box::new(move |variant: &Variant| {
+        let name = &variant.ident;
+        let fields = &variant.fields.fields;
+
+        let field_getters = fields.iter().map(|f| {
+            let field_name = &f.ident;
+            let ty = &f.ty;
+            let field_not_set = not_set_err(field_name);
+
+            let get_value = quote! { item.get(stringify!(#field_name)) };
+
+            match inner_type_of("Option", ty) {
+                Some(ty) => {
+                    let into_value = from_attribute_value(ty);
+
+                    quote! {
+                        #field_name: #get_value
+                            .map(|v| { #into_value })
+                            .transpose()?
+                    }
+                }
+                None => {
+                    let into_value = from_attribute_value(ty);
+
+                    quote! {
+                        #field_name: #get_value
+                            .ok_or(#field_not_set)
+                            .and_then(|v| { #into_value })?
+                    }
+                }
+            }
+        });
+
+        let renamed = variant.renamed(&rule);
+
+        quote! {
+            stringify!(#renamed) => {
+                return Ok(Self::#name { #(#field_getters,)* });
+            }
+        }
+    })
+}
+
+pub fn into_hashmap(
+    ident: &syn::Ident,
+    tag: &Option<String>,
+    rule: &RenameRule,
+    variants: &[Variant],
+) -> TokenStream {
+    let set_outer = if tag.is_some() {
+        quote!()
+    } else {
+        quote! { let mut outer: Self = ::std::collections::HashMap::new(); }
+    };
+
+    let return_value = if tag.is_some() {
+        quote! { item }
+    } else {
+        quote! { outer }
+    };
+
+    let setter_branches = variants.iter().map(setter_branch(tag, rule));
+
+    quote! {
+        #set_outer
+        let mut item: Self = ::std::collections::HashMap::new();
+
+        match value {
+            #(#ident::#setter_branches)*
+        }
+
+        #return_value
+    }
+}
+
+pub fn setter_branch(
+    tag: &Option<String>,
+    rule: &RenameRule,
+) -> Box<dyn Fn(&Variant) -> TokenStream> {
+    let tag = tag.clone();
+    let rule = *rule;
+
     Box::new(move |variant: &Variant| {
         let name = &variant.ident;
         let fields = &variant.fields.fields;
@@ -80,12 +178,31 @@ where
             }
         });
 
-        let set_variant_name_to_outer = set_tag(name);
+        let renamed_variant = variant.renamed(&rule);
+        let renamed = quote! { stringify!(#renamed_variant).into() };
+
+        let set_variant = if let Some(ref tag) = tag {
+            let tag = token_from_str(tag);
+
+            quote! {
+                item.insert(
+                    stringify!(#tag).into(),
+                    ::aws_sdk_dynamodb::types::AttributeValue::S(#renamed),
+                );
+            }
+        } else {
+            quote! {
+                outer.insert(
+                    #renamed,
+                    ::aws_sdk_dynamodb::types::AttributeValue::M(item),
+                );
+            }
+        };
 
         quote! {
             #name { #(#field_names,)* } => {
                 #(#field_setters)*
-                #set_variant_name_to_outer
+                #set_variant
             }
         }
     })

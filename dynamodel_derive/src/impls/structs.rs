@@ -1,10 +1,10 @@
 use super::*;
 
-pub fn getter_token(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStream {
+pub fn getter_token(field: &Field, rename_rule: &RenameRule) -> TokenStream {
     let field_name = &field.ident;
     let ty = &field.ty;
     let field_not_set = not_set_err(field_name);
-    let hash_key = field.hash_key(rename_rule);
+    let hash_key = field.renamed(rename_rule);
 
     if let Some(ref converter) = field.try_from_item {
         return quote! {
@@ -44,10 +44,10 @@ pub fn getter_token(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStr
     }
 }
 
-pub fn setter_token(field: &Field, rename_rule: &Option<RenameRule>) -> TokenStream {
+pub fn setter_token(field: &Field, rename_rule: &RenameRule) -> TokenStream {
     let field_name = &field.ident;
     let ty = &field.ty;
-    let hash_key_token = field.hash_key(rename_rule);
+    let hash_key_token = field.renamed(rename_rule);
     let hash_key = quote! { stringify!(#hash_key_token).into() };
 
     if let Some(ref converter) = field.into {
