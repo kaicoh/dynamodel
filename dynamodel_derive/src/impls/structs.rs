@@ -1,89 +1,62 @@
 use super::*;
+use proc_macro_error::abort;
 
-pub fn getter_token(field: &Field, rename_rule: &RenameRule) -> TokenStream {
-    let field_name = &field.ident;
-    let ty = &field.ty;
-    let field_not_set = not_set_err(field_name);
-    let hash_key = field.renamed(rename_rule);
+pub fn into_hashmap(
+    extra: &Option<darling::Result<syn::Path>>,
+    fields: &[Field],
+    rule: &RenameRule,
+) -> TokenStream {
+    wrap_extra(extra, build_hashmap(fields, rule))
+}
 
-    if let Some(ref converter) = field.try_from_item {
-        return quote! {
-            #field_name: #converter(&item)?
-        };
-    }
+fn build_hashmap(fields: &[Field], rule: &RenameRule) -> TokenStream {
+    let setters = fields.iter().filter_map(|f| into_setter_token(f, rule));
 
-    let get_value = quote! { item.get(stringify!(#hash_key)) };
-
-    if let Some(ref converter) = field.try_from {
-        return quote! {
-            #field_name: #get_value
-                .ok_or(#field_not_set)
-                .and_then(#converter)?
-        };
-    }
-
-    match inner_type_of("Option", ty) {
-        Some(ty) => {
-            let into_value = from_attribute_value(ty);
-
-            quote! {
-                #field_name: #get_value
-                    .map(|v| { #into_value })
-                    .transpose()?
-            }
-        }
-        None => {
-            let into_value = from_attribute_value(ty);
-
-            quote! {
-                #field_name: #get_value
-                    .ok_or(#field_not_set)
-                    .and_then(|v| { #into_value })?
-            }
-        }
+    quote! {
+        let mut item: Self = ::std::collections::HashMap::new();
+        #(#setters)*
     }
 }
 
-pub fn setter_token(field: &Field, rename_rule: &RenameRule) -> TokenStream {
-    let field_name = &field.ident;
-    let ty = &field.ty;
-    let hash_key_token = field.renamed(rename_rule);
-    let hash_key = quote! { stringify!(#hash_key_token).into() };
-
-    if let Some(ref converter) = field.into {
-        return quote! {
-            let v = value.#field_name;
-            item.insert(#hash_key, #converter(v));
-        };
-    }
-
-    match inner_type_of("Option", ty) {
-        Some(ty) => {
-            let variant = attribute_value_variant(ty);
-
-            quote! {
-                if let Some(v) = value.#field_name {
-                    item.insert(
-                        #hash_key,
-                        ::aws_sdk_dynamodb::types::AttributeValue::#variant,
-                    );
-                }
-            }
-        }
-        None => {
-            let variant = attribute_value_variant(ty);
-
-            quote! {
-                let v = value.#field_name;
-                item.insert(
-                    #hash_key,
-                    ::aws_sdk_dynamodb::types::AttributeValue::#variant,
-                );
-            }
-        }
+fn into_setter_token(f: &Field, rule: &RenameRule) -> Option<TokenStream> {
+    if f.skip_into.is_some_and(|v| v) {
+        None
+    } else {
+        Some(f.setter(rule, |v| quote! { value.#v }))
     }
 }
 
-fn attribute_value_variant(ty: &syn::Type) -> TokenStream {
-    into_attribute_value(ty, quote!(v))
+pub fn try_from_hashmap(fields: &[Field], rule: &RenameRule) -> TokenStream {
+    let getters = fields.iter().map(|f| f.getter(rule));
+
+    quote! {
+        Ok(Self { #(#getters,)* })
+    }
+}
+
+fn wrap_extra(extra: &Option<darling::Result<syn::Path>>, inner: TokenStream) -> TokenStream {
+    let (init, set) = match extra.as_ref() {
+        Some(Ok(path)) => {
+            let init = quote! {
+                let extra_item: Self = #path(&value);
+            };
+            let set = quote! { item.extend(extra_item); };
+            (init, set)
+        }
+        Some(Err(err)) => {
+            abort! {
+                err.span(), "Invalid attribute #[dynamodel(extra = ...)]";
+                note = "Invalid argument for `extra` attribute. Only paths are allowed.";
+                help = "Try formating the argument like `path::to::function` or `\"path::to::function\"`";
+            }
+        }
+        None => (quote!(), quote!()),
+    };
+
+    quote! {
+        #init
+        #inner
+        #set
+        item
+    }
 }
