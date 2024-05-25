@@ -40,6 +40,7 @@ pub struct Variant {
     pub ident: syn::Ident,
     pub attrs: Vec<syn::Attribute>,
     pub fields: darling::ast::Fields<Field>,
+    pub rename_all: Option<syn::Lit>,
 }
 
 impl ToTokens for Variant {
@@ -55,5 +56,12 @@ impl Variant {
         let name_str = name.to_token_stream().to_string();
         let renamed = rule.apply_to_variant(&name_str);
         token_from_str(&renamed)
+    }
+
+    pub fn rename_rule_for_fields(&self) -> RenameRule {
+        self.rename_all
+            .as_ref()
+            .map(RenameRule::from_lit)
+            .unwrap_or_default()
     }
 }

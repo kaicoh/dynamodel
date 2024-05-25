@@ -63,13 +63,15 @@ fn getter_branch(rule: &RenameRule) -> Box<dyn Fn(&Variant) -> TokenStream> {
     Box::new(move |variant: &Variant| {
         let name = &variant.ident;
         let fields = &variant.fields.fields;
+        let field_rename_rule = variant.rename_rule_for_fields();
 
         let field_getters = fields.iter().map(|f| {
             let field_name = &f.ident;
             let ty = &f.ty;
             let field_not_set = not_set_err(field_name);
+            let hash_key = f.renamed(&field_rename_rule);
 
-            let get_value = quote! { item.get(stringify!(#field_name)) };
+            let get_value = quote! { item.get(stringify!(#hash_key)) };
 
             match inner_type_of("Option", ty) {
                 Some(ty) => {
@@ -145,12 +147,15 @@ pub fn setter_branch(
     Box::new(move |variant: &Variant| {
         let name = &variant.ident;
         let fields = &variant.fields.fields;
+        let field_rename_rule = variant.rename_rule_for_fields();
 
         let field_names = fields.iter().map(|f| &f.ident);
 
         let field_setters = fields.iter().map(|f| {
             let field_name = &f.ident;
             let ty = &f.ty;
+            let hash_key_token = f.renamed(&field_rename_rule);
+            let hash_key = quote! { stringify!(#hash_key_token).into() };
 
             match inner_type_of("Option", ty) {
                 Some(ty) => {
@@ -159,7 +164,7 @@ pub fn setter_branch(
                     quote! {
                         if let Some(#field_name) = #field_name {
                             item.insert(
-                                stringify!(#field_name).into(),
+                                #hash_key,
                                 ::aws_sdk_dynamodb::types::AttributeValue::#attribute_value,
                             );
                         }
@@ -170,7 +175,7 @@ pub fn setter_branch(
 
                     quote! {
                         item.insert(
-                            stringify!(#field_name).into(),
+                            #hash_key,
                             ::aws_sdk_dynamodb::types::AttributeValue::#attribute_value,
                         );
                     }
