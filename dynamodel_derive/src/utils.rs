@@ -40,6 +40,7 @@ pub struct Variant {
     pub ident: syn::Ident,
     pub attrs: Vec<syn::Attribute>,
     pub fields: darling::ast::Fields<Field>,
+    pub rename: Option<String>,
     pub rename_all: Option<syn::Lit>,
 }
 
@@ -52,6 +53,10 @@ impl ToTokens for Variant {
 impl Variant {
     pub fn renamed(&self, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
+
+        if let Some(ref renamed_variant) = self.rename {
+            return token_from_str(renamed_variant);
+        }
 
         let name_str = name.to_token_stream().to_string();
         let renamed = rule.apply_to_variant(&name_str);
