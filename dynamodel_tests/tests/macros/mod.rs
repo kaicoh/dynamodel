@@ -48,3 +48,16 @@ macro_rules! assert_parse_float {
         }
     };
 }
+
+#[allow(unused_macros)]
+macro_rules! assert_variant_not_found {
+    ($result:expr $(,)?) => {
+        match $result {
+            Err(err) => assert!(matches!(err, ConvertError::VariantNotFound)),
+            _ => unreachable!(
+                "{} should be an ConvertError::VariantNotFound",
+                stringify!($result)
+            ),
+        }
+    };
+}

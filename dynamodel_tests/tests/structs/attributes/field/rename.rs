@@ -1,6 +1,4 @@
-use aws_sdk_dynamodb::types::AttributeValue;
-use dynamodel::Dynamodel;
-use std::collections::HashMap;
+use super::*;
 
 #[derive(Dynamodel, Debug, PartialEq, Clone)]
 struct Person {

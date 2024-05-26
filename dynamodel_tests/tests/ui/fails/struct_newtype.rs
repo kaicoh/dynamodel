@@ -1,6 +1,6 @@
 use dynamodel::Dynamodel;
 
 #[derive(Dynamodel)]
-struct TupleStruct(String);
+struct NewType(String);
 
 fn main() {}
