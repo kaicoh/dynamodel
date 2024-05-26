@@ -1,9 +1,9 @@
 [package]
 name = "dynamodel"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Kanji Tanaka <sumireminami@gmail.com"]
 license = "MIT"
-description = "Implement conversion between your struct and Dynamodb item."
+description = "This library provides a derive macro to implement conversions between your object and `HashMap<String, AttributeValue>`."
 homepage = "https://github.com/kaicoh/dynamodel"
 repository = "https://github.com/kaicoh/dynamodel"
 keywords = ["dynamodb", "aws"]

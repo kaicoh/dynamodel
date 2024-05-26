@@ -1,6 +1,6 @@
 [package]
 name = "dynamodel_derive"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Kanji Tanaka <sumireminami@gmail.com"]
 license = "MIT"
 description = "Macros 1.1 implementation of #[derive(Dynamodel)]"
