@@ -1,6 +1,6 @@
 [package]
 name = "dynamodel"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Kanji Tanaka <sumireminami@gmail.com"]
 license = "MIT"
 description = "Implement conversion between your struct and Dynamodb item."
@@ -11,6 +11,6 @@ edition = "2021"
 readme = "../README.md"
 
 [dependencies]
-dynamodel_derive = { version = "0.2", path = "../dynamodel_derive" }
+dynamodel_derive = { version = "0.3", path = "../dynamodel_derive" }
 aws-sdk-dynamodb = { workspace = true }
 thiserror = "1"

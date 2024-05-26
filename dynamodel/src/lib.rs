@@ -1,5 +1,6 @@
 //! # dynamodel
-//! This library provide a derive macro to implement conversion between your struct and
+//!
+//! This library provides a derive macro to implement conversions between your object and
 //! [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
 //!
 //! ## Usage
@@ -43,21 +44,21 @@
 //!
 //! ## Implicit conversion
 //!
-//! This macro converts some types implicitly so you don't have to add any code. These types are
-//! followings.
+//! This macro implicitly converts some types, so you don't have to add any code. The types are
+//! as follows.
 //!
-//! | Type | AttributeValue variant | memo |
+//! | Type | AttributeValue variant | Condition |
 //! |---|---|---|
-//! | `String` | `AttributeValue::S` |  |
-//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N` |  |
-//! | `bool` | `AttributeValue::Bool` |  |
-//! | Any struct that implements `Dynamodel` macro | `AttributeValue::M` |  |
-//! | `Vec<inner type>` | `AttributeValue::L` | The inner type must be one of the implicit conversion types. |
-//! | `Option<inner type>` | Depends on the inner type | The inner type must be one of the implicit conversion types. |
+//! | `String` | `AttributeValue::S` | none |
+//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N` | none |
+//! | `bool` | `AttributeValue::Bool` | none |
+//! | Any structs or enums | `AttributeValue::M` | must implement both<br>`Into<HashMap<String, AttributeValue>>`<br>and<br>`TryFrom<HashMap<String, AttributeValue>, Error = ConvertError>` |
+//! | `Vec<inner type>` | `AttributeValue::L` | the inner type must be one of the implicit conversion types. |
+//! | `Option<inner type>` | Depends on the inner type | the inner type must be one of the implicit conversion types. |
 //!
 //! ## Explicit conversion
 //!
-//! Using field attribute, you can implement original conversion methods for any types like this.
+//! Using the field attribute, you can implement custom conversion methods for any type like this.
 //!
 //! ```rust
 //! use dynamodel::{Dynamodel, ConvertError};
@@ -83,139 +84,16 @@
 //! }
 //! ```
 //!
-//! The function definition must satisfy these conditions.
+//! The function definition must meet these conditions.
 //!
-//! | Conversion | Argument | Return |
+//! | Field attribute | Argument | Return |
 //! |---|---|---|
-//! | `field type => AttributeValue` | `field type` | [`AttributeValue`] |
-//! | `AttributeValue => field type` | `&`[`AttributeValue`] | [`Result`]`<field type,`[`ConvertError`]`>` |
+//! | `#[dynamodel(into = "...")]`| `field type` | `AttributeValue` |
+//! | `#[dynamodel(try_from = "...")]` | `&AttributeValue` | `Result<field type, ConvertError>` |
 //!
-//! ## Rename HashMap key
+//! ## More features
 //!
-//! Like [serde crate](https://crates.io/crates/serde), you can rename
-//! [HashMap](std::collections::HashMap) key from your struct field name.
-//!
-//! ### Container attribute `rename_all`
-//!
-//! The allowed values for `rename_all` attribute are `UPPERCASE`, `PascalCase`, `camelCase`,
-//! `SCREAMING_SNAKE_CASE`, `kebab-case` and `SCREAMING-KEBAB-CASE`.
-//!
-//! ```rust
-//! use dynamodel::Dynamodel;
-//! # use std::collections::HashMap;
-//! # use aws_sdk_dynamodb::types::AttributeValue;
-//!
-//! // Use `rename_all` as container attribute.
-//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
-//! #[dynamodel(rename_all = "PascalCase")]
-//! struct Person {
-//!     first_name: String,
-//!     last_name: String,
-//! }
-//!
-//! let person = Person {
-//!     first_name: "Kanji".into(),
-//!     last_name: "Tanaka".into(),
-//! };
-//!
-//! let item: HashMap<String, AttributeValue> = [
-//!     ("FirstName".to_string(), AttributeValue::S("Kanji".into())),
-//!     ("LastName".to_string(), AttributeValue::S("Tanaka".into())),
-//! ].into();
-//!
-//! let converted: HashMap<String, AttributeValue> = person.clone().into();
-//! assert_eq!(converted, item);
-//!
-//! let converted: Person = item.try_into().unwrap();
-//! assert_eq!(converted, person);
-//! ```
-//!
-//! ### Field attribute `rename`
-//!
-//! You can also rename key using field attribute `rename`.
-//!
-//! ```rust
-//! use dynamodel::Dynamodel;
-//! # use std::collections::HashMap;
-//! # use aws_sdk_dynamodb::types::AttributeValue;
-//!
-//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
-//! struct Person {
-//!     // Use `rename` as field attribute.
-//!     #[dynamodel(rename = "GivenName")]
-//!     first_name: String,
-//!     #[dynamodel(rename = "FamilyName")]
-//!     last_name: String,
-//! }
-//!
-//! let person = Person {
-//!     first_name: "Kanji".into(),
-//!     last_name: "Tanaka".into(),
-//! };
-//!
-//! let item: HashMap<String, AttributeValue> = [
-//!     ("GivenName".to_string(), AttributeValue::S("Kanji".into())),
-//!     ("FamilyName".to_string(), AttributeValue::S("Tanaka".into())),
-//! ].into();
-//!
-//! let converted: HashMap<String, AttributeValue> = person.clone().into();
-//! assert_eq!(converted, item);
-//!
-//! let converted: Person = item.try_into().unwrap();
-//! assert_eq!(converted, person);
-//! ```
-//!
-//! ## Extra key-value pair for HashMap
-//!
-//! If you design your struct according to the
-//! [single-table design](https://aws.amazon.com/jp/blogs/compute/creating-a-single-table-design-with-amazon-dynamodb/),
-//! you want set additional key-value sets to the [HashMap](std::collections::HashMap) sometimes.
-//!
-//! For example, the following diagram shows both `Video` and `VideoStats` are stored in the same
-//! table.
-//!
-//! ![Videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table.png?raw=true)
-//!
-//! Using container attribute `extra`, you can implement this structure.
-//! The `extra` value must be a path for function whose argument is a reference of the struct's
-//! instance and its return type is [HashMap](std::collections::HashMap)<[String],
-//! [AttributeValue]>.
-//!
-//! ```rust
-//! use dynamodel::Dynamodel;
-//! # use std::collections::HashMap;
-//! # use aws_sdk_dynamodb::types::AttributeValue;
-//!
-//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
-//! #[dynamodel(extra = "VideoStats::sort_key", rename_all = "PascalCase")]
-//! struct VideoStats {
-//!     #[dynamodel(rename = "PK")]
-//!     id: String,
-//!     view_count: u64,
-//! }
-//!
-//! impl VideoStats {
-//!     fn sort_key(&self) -> HashMap<String, AttributeValue> {
-//!         [
-//!             ("SK".to_string(), AttributeValue::S("VideoStats".into())),
-//!         ].into()
-//!     }
-//! }
-//!
-//! let stats = VideoStats {
-//!     id: "7cf27a02".into(),
-//!     view_count: 147,
-//! };
-//!
-//! let item: HashMap<String, AttributeValue> = [
-//!     ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
-//!     ("SK".to_string(), AttributeValue::S("VideoStats".into())),
-//!     ("ViewCount".to_string(), AttributeValue::N("147".into())),
-//! ].into();
-//!
-//! let converted: HashMap<String, AttributeValue> = stats.into();
-//! assert_eq!(converted, item);
-//! ```
+//! For more features, refer to [this wiki](https://github.com/kaicoh/dynamodel/wiki).
 
 /// Derive macro to implement conversion between your struct and
 /// [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
@@ -243,6 +121,10 @@ pub enum ConvertError {
     /// Occurs when parsing string into float value.
     #[error("{0}")]
     ParseFloat(#[from] ParseFloatError),
+
+    /// Not found any variant when parsing HashMap from enum.
+    #[error("not found any variant in hashmap")]
+    VariantNotFound,
 
     /// Any error when converting. You can use this wrapper to implement your original conversion
     /// methods.

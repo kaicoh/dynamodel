@@ -1,9 +1,0 @@
-error: Invalid `rename_all` attribute value
-
-         = note: "unknown" is not supported as `rename_all` value
-         = help: Use one of the "UPPERCASE", "PascalCase", "camelCase", "SCREAMING_SNAKE_CASE", "kebab-case" and "SCREAMING-KEBAB-CASE"
-
- --> tests/fails/attribute/invalid_rename_all.rs:4:26
-  |
-4 | #[dynamodel(rename_all = "unknown")]
-  |                          ^^^^^^^^^

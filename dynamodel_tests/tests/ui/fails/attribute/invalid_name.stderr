@@ -1,0 +1,5 @@
+error: Unknown field: `foo`
+ --> tests/ui/fails/attribute/invalid_name.rs:5:17
+  |
+5 |     #[dynamodel(foo(path = "unknown"))]
+  |                 ^^^

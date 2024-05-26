@@ -1,7 +1,8 @@
-use super::case::RenameRule;
-use darling::FromField;
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+
+pub fn token_from_str(value: &String) -> TokenStream {
+    value.to_owned().parse().unwrap()
+}
 
 pub fn is_string(ty: &syn::Type) -> bool {
     type_is("String", ty)
@@ -103,30 +104,3 @@ macro_rules! type_is_vec_fn {
 }
 
 type_is_vec_fn!(is_string, is_bool, is_number);
-
-pub fn hash_key_name(field: &Field, rule: &Option<RenameRule>) -> TokenStream {
-    let field_name = &field.ident;
-
-    if let Some(ref renamed_field) = field.rename {
-        return renamed_field.to_owned().parse().unwrap();
-    }
-
-    if let Some(ref rule) = rule {
-        let field_name_str = field_name.to_token_stream().to_string();
-        let renamed_field = rule.apply(&field_name_str);
-        renamed_field.parse().unwrap()
-    } else {
-        quote!(#field_name)
-    }
-}
-
-#[derive(Debug, FromField, Clone)]
-#[darling(attributes(dynamodel))]
-pub struct Field {
-    pub ident: Option<syn::Ident>,
-    pub ty: syn::Type,
-    pub attrs: Vec<syn::Attribute>,
-    pub into: Option<syn::Expr>,
-    pub try_from: Option<syn::Expr>,
-    pub rename: Option<String>,
-}
