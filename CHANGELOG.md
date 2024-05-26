@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.1][] - 2024-05-27
+
+- Make the enum `ConvertError` Send and Sync.
+
 ## [0.3.0][] - 2024-05-26
 
 - Enum support
@@ -14,6 +18,7 @@
 
 - pre-release
 
+[0.3.1]: https://github.com/kaicoh/dynamodel/releases/v0.3.1
 [0.3.0]: https://github.com/kaicoh/dynamodel/releases/v0.3.0
 [0.2.0]: https://github.com/kaicoh/dynamodel/releases/v0.2.0
 [0.1.0]: https://github.com/kaicoh/dynamodel/releases/v0.1.0

@@ -129,5 +129,5 @@ pub enum ConvertError {
     /// Any error when converting. You can use this wrapper to implement your original conversion
     /// methods.
     #[error(transparent)]
-    Other(Box<dyn std::error::Error>),
+    Other(Box<dyn std::error::Error + Send + Sync>),
 }
