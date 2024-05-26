@@ -27,12 +27,10 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v4
 
-      - name: Setup rust
-        uses: actions-rs/toolchain@v1
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - name: Publish derive library
         run: cargo publish -p dynamodel_derive --all-features --token ${{ secrets.CARGO_TOKEN }}
