@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/crates/v/dynamodel)](https://crates.io/crates/dynamodel)
 [![License](https://img.shields.io/crates/l/dynamodel)](LICENSE)
-[![Test](https://img.shields.io/github/actions/workflow/status/kaicoh/dynamodel/test.yml)](https://github.com/kaicoh/dynamodel/actions/workflows/ci.yml)
+[![Test](https://img.shields.io/github/actions/workflow/status/kaicoh/dynamodel/ci.yml)](https://github.com/kaicoh/dynamodel/actions/workflows/ci.yml)
 
 This library provides a derive macro to implement conversions between your object and `HashMap<String, AttributeValue>`.
 
