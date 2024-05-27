@@ -2,11 +2,30 @@ use super::*;
 use proc_macro_error::abort;
 
 pub fn into_hashmap(
+    ident: &syn::Ident,
+    tag: &Option<String>,
     extra: &Option<darling::Result<syn::Path>>,
     fields: &[Field],
     rule: &RenameRule,
 ) -> TokenStream {
-    wrap_extra(extra, build_hashmap(fields, rule))
+    let token = wrap_extra(extra, build_hashmap(fields, rule));
+
+    let set_tag = if let Some(ref tag) = tag {
+        quote! {
+            item.insert(
+                #tag.into(),
+                ::aws_sdk_dynamodb::types::AttributeValue::S(stringify!(#ident).into()),
+            );
+        }
+    } else {
+        quote!()
+    };
+
+    quote! {
+        #token
+        #set_tag
+        item
+    }
 }
 
 fn build_hashmap(fields: &[Field], rule: &RenameRule) -> TokenStream {
@@ -57,6 +76,5 @@ fn wrap_extra(extra: &Option<darling::Result<syn::Path>>, inner: TokenStream) ->
         #init
         #inner
         #set
-        item
     }
 }
