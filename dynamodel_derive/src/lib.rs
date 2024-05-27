@@ -64,8 +64,8 @@ impl TargetStruct {
             .map(|f| f.parsed)
             .collect();
 
-        let into_hashmap = structs::into_hashmap(&self.extra, &fields, &rename_rule);
-
+        let into_hashmap =
+            structs::into_hashmap(ident, &self.tag, &self.extra, &fields, &rename_rule);
         let try_from_hashmap = structs::try_from_hashmap(&fields, &rename_rule);
 
         quote! {
@@ -92,7 +92,6 @@ impl TargetStruct {
         let variants = self.data.take_enum().unwrap();
 
         let into_hashmap = enums::into_hashmap(ident, &self.tag, &variants, &rename_rule);
-
         let try_from_hashmap = enums::try_from_hashmap(&self.tag, &variants, &rename_rule);
 
         quote! {
