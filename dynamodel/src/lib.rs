@@ -95,39 +95,40 @@
 //!
 //! For more features, refer to [this wiki](https://github.com/kaicoh/dynamodel/wiki).
 
-/// Derive macro to implement conversion between your struct and
-/// [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
+/// Derive macro to implement both `Into<HashMap<String, AttributeValue>>` and `TryFrom<HashMap<String, AttributeValue>>` traits.
+///
+/// For details, refer to [the wiki](https://github.com/kaicoh/dynamodel/wiki).
 pub use dynamodel_derive::Dynamodel;
 
 use aws_sdk_dynamodb::types::AttributeValue;
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
-/// A conversion error from [AttributeValue] to your struct field.
+/// An error occurs when converting from a `HashMap<String, AttributeValue>` to your object.
 #[derive(Debug, Error)]
 pub enum ConvertError {
-    /// Occurs when the [HashMap](std::collections::HashMap)<[String], [AttributeValue]> has no key value pair for the field.
+    /// There is no key-value pair for this field in the HashMap.
     #[error("`{0}` field is not set")]
     FieldNotSet(String),
 
-    /// Occurs when the [HashMap](std::collections::HashMap)<[String], [AttributeValue]> has a key value pair for the field but its variant is match.
+    /// There is a key-value pair for the field, but the type of AttributeValue is not what is expected.
     #[error("expect `{0}` type, but got `{1:?}`")]
     AttributeValueUnmatched(String, AttributeValue),
 
-    /// Occurs when parsing string into integer value.
+    /// The value in the HashMap should be an integer, but it isn't.
     #[error("{0}")]
     ParseInt(#[from] ParseIntError),
 
-    /// Occurs when parsing string into float value.
+    /// The value in the HashMap should be a float, but it isn't.
     #[error("{0}")]
     ParseFloat(#[from] ParseFloatError),
 
-    /// Not found any variant when parsing HashMap from enum.
+    /// There are no vairants for the enum in the HashMap.
     #[error("not found any variant in hashmap")]
     VariantNotFound,
 
-    /// Any error when converting. You can use this wrapper to implement your original conversion
-    /// methods.
+    /// Any other errors when converting from a HashMap to your object.
+    /// You can wrap your original errors in this variant.
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }
