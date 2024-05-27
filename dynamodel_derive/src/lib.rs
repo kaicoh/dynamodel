@@ -14,7 +14,10 @@ use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 // The main struct we get from parsing the attributes
 // Ref: https://github.com/TedDriggs/darling?tab=readme-ov-file#shape-validation
 #[derive(Debug, FromDeriveInput)]
-#[darling(attributes(dynamodel), supports(struct_named, enum_named))]
+#[darling(
+    attributes(dynamodel),
+    supports(struct_named, enum_named, enum_newtype)
+)]
 #[darling(and_then = "TargetStruct::validate")]
 struct TargetStruct {
     ident: syn::Ident,
