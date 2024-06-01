@@ -41,12 +41,12 @@ fn into_setter_token(f: &Field, rule: &RenameRule) -> Option<TokenStream> {
     if f.skip_into.is_some_and(|v| v) {
         None
     } else {
-        Some(f.setter(rule, |v| quote! { value.#v }))
+        Some(f.named_setter(rule, |v| quote! { value.#v }))
     }
 }
 
 pub fn try_from_hashmap(fields: &[Field], rule: &RenameRule) -> TokenStream {
-    let getters = fields.iter().map(|f| f.getter(rule));
+    let getters = fields.iter().map(|f| f.named_getter(rule));
 
     quote! {
         Ok(Self { #(#getters,)* })

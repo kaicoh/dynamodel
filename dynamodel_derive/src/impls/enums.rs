@@ -15,7 +15,7 @@ pub fn into_hashmap(
         )
     };
 
-    let branches = variants.iter().map(|v| v.setter_branch(tag, rule));
+    let branches = variants.iter().map(|v| v.setters(tag, rule));
 
     quote! {
         #init
@@ -41,7 +41,7 @@ pub fn try_from_hashmap(
 
 fn internally_tagged(tag: &String, variants: &[Variant], rule: &RenameRule) -> TokenStream {
     let tag_token = token_from_str(tag);
-    let branches = variants.iter().map(|v| v.getter_branch(rule));
+    let branches = variants.iter().map(|v| v.getters(rule));
 
     quote! {
         let tag = item
@@ -64,17 +64,32 @@ fn internally_tagged(tag: &String, variants: &[Variant], rule: &RenameRule) -> T
 }
 
 fn externally_tagged(variants: &[Variant], rule: &RenameRule) -> TokenStream {
-    let variant_names = variants.iter().map(|v| {
+    let (newtypes, named_fields): (Vec<&Variant>, Vec<&Variant>) =
+        variants.iter().partition(|&v| v.is_newtype());
+
+    let newtypes_token = externally_tagged_newtype(&newtypes, rule);
+    let named_fields_token = externally_tagged_named_fields(&named_fields, rule);
+
+    quote! {
+        #newtypes_token
+        #named_fields_token
+        Err(::dynamodel::ConvertError::VariantNotFound)
+    }
+}
+
+fn externally_tagged_named_fields(variants: &[&Variant], rule: &RenameRule) -> TokenStream {
+    if variants.is_empty() {
+        return quote!();
+    }
+
+    let names = variants.iter().map(|&v| {
         let renamed = v.renamed(rule);
         quote!(stringify!(#renamed))
     });
-
-    let branches = variants.iter().map(|v| v.getter_branch(rule));
+    let branches = variants.iter().map(|&v| v.getters(rule));
 
     quote! {
-        let variants = vec![#(#variant_names,)*];
-
-        for variant in variants {
+        for variant in [#(#names,)*] {
             match item.get(variant) {
                 Some(::aws_sdk_dynamodb::types::AttributeValue::M(ref item)) => {
                     match variant {
@@ -88,7 +103,17 @@ fn externally_tagged(variants: &[Variant], rule: &RenameRule) -> TokenStream {
                 None => {}
             }
         }
+    }
+}
 
-        Err(::dynamodel::ConvertError::VariantNotFound)
+fn externally_tagged_newtype(variants: &[&Variant], rule: &RenameRule) -> TokenStream {
+    if variants.is_empty() {
+        return quote!();
+    }
+
+    let branches = variants.iter().map(|&v| v.getters(rule));
+
+    quote! {
+        #(#branches)*
     }
 }

@@ -1,7 +1,9 @@
 use super::{case::RenameRule, utils::*};
 use darling::{FromField, FromVariant};
 use proc_macro2::TokenStream;
+use proc_macro_error::abort;
 use quote::{quote, ToTokens};
+use syn::spanned::Spanned;
 
 #[derive(Debug, FromField, Clone)]
 #[darling(attributes(dynamodel))]
@@ -30,7 +32,7 @@ impl Field {
     }
 
     // token to retrieve field value from the HashMap
-    pub fn getter(&self, rule: &RenameRule) -> TokenStream {
+    pub fn named_getter(&self, rule: &RenameRule) -> TokenStream {
         let field_name = &self.ident;
         let ty = &self.ty;
         let field_not_set = not_set_err(field_name);
@@ -74,8 +76,26 @@ impl Field {
         }
     }
 
+    pub fn newtype_getter(&self) -> TokenStream {
+        let ty = &self.ty;
+
+        if inner_type_of("Option", ty).is_some() {
+            abort! {
+                ty.span(), "newtype variant with optional is not supported.";
+                note = "You cannot use tagged newtype variant containing an optional.";
+            }
+        } else {
+            let into_value = from_attribute_value(ty);
+
+            quote! {
+                .map(|v| #into_value)
+                .transpose()?
+            }
+        }
+    }
+
     // token to set key, value pair to the HashMap.
-    pub fn setter<T>(&self, rule: &RenameRule, get_value: T) -> TokenStream
+    pub fn named_setter<T>(&self, rule: &RenameRule, get_value: T) -> TokenStream
     where
         T: Fn(&Option<syn::Ident>) -> TokenStream,
     {
@@ -138,6 +158,10 @@ impl ToTokens for Variant {
 }
 
 impl Variant {
+    pub fn is_newtype(&self) -> bool {
+        self.fields.is_newtype()
+    }
+
     pub fn renamed(&self, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
 
@@ -150,33 +174,88 @@ impl Variant {
         token_from_str(&renamed)
     }
 
-    pub fn getter_branch(&self, rule: &RenameRule) -> TokenStream {
+    fn newtype_getter(&self, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
-        let fields = &self.fields.fields;
-        let field_rename_rule = self.rename_rule_for_fields();
         let renamed = self.renamed(rule);
 
-        let field_getters = fields.iter().map(|f| f.getter(&field_rename_rule));
+        let getter = self.fields.fields[0].newtype_getter();
 
         quote! {
-            stringify!(#renamed) => {
-                return Ok(Self::#name { #(#field_getters,)* });
+            if let Some(v) = item.get(stringify!(#renamed))#getter {
+                return Ok(Self::#name(v));
             }
         }
     }
 
-    pub fn setter_branch(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
+    fn named_getters(&self, rule: &RenameRule) -> TokenStream {
+        let name = &self.ident;
+        let renamed = self.renamed(rule);
+
+        let rule = self.rename_rule_for_fields();
+        let getters = self.fields.fields.iter().map(|f| f.named_getter(&rule));
+
+        quote! {
+            stringify!(#renamed) => {
+                return Ok(Self::#name { #(#getters,)* });
+            }
+        }
+    }
+
+    pub fn getters(&self, rule: &RenameRule) -> TokenStream {
+        if self.is_newtype() {
+            self.newtype_getter(rule)
+        } else {
+            self.named_getters(rule)
+        }
+    }
+
+    fn newtype_setter(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
+        if tag.is_some() {
+            let ty = &self.fields.fields[0].ty.to_token_stream();
+            abort! {
+                self.span(), "Invalid attribute #[dynamodel(tag = ...)]";
+                note = "You cannot use tagged newtype variant containing \"{}\".", ty;
+                help = "Try removing #[dynamodel(tag = ...)].";
+            }
+        }
+
+        let renamed_variant = self.renamed(rule);
+        let renamed = quote! { stringify!(#renamed_variant).into() };
+
+        let name = &self.ident;
+        let ty = &self.fields.fields[0].ty;
+        let value = into_attribute_value(ty);
+
+        quote! {
+            #name(v) => {
+                outer.insert(
+                    #renamed,
+                    ::aws_sdk_dynamodb::types::AttributeValue::#value,
+                );
+            }
+        }
+    }
+
+    fn named_setters(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
         let field_names = self.fields.fields.iter().map(|f| &f.ident);
 
         let field_setters = self.field_setters();
-        let variant_setter = self.variant_setter(tag, rule);
+        let variant_setter = self.variant_setter_named(tag, rule);
 
         quote! {
             #name { #(#field_names,)* } => {
                 #(#field_setters)*
                 #variant_setter
             }
+        }
+    }
+
+    pub fn setters(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
+        if self.is_newtype() {
+            self.newtype_setter(tag, rule)
+        } else {
+            self.named_setters(tag, rule)
         }
     }
 
@@ -187,7 +266,7 @@ impl Variant {
             .unwrap_or_default()
     }
 
-    fn variant_setter(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
+    fn variant_setter_named(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
         let renamed_variant = self.renamed(rule);
         let renamed = quote! { stringify!(#renamed_variant).into() };
 
@@ -216,7 +295,7 @@ impl Variant {
 
         fields
             .iter()
-            .map(move |f| f.setter(&field_rename_rule, |v| quote!(#v)))
+            .map(move |f| f.named_setter(&field_rename_rule, |v| quote!(#v)))
     }
 }
 
