@@ -3,9 +3,7 @@ use super::*;
 #[derive(Dynamodel, Debug, PartialEq)]
 #[dynamodel(tag = "type")]
 enum Message {
-    #[allow(dead_code)]
     Request { id: String, method: String },
-    #[allow(dead_code)]
     Response { id: String, result: String },
 }
 

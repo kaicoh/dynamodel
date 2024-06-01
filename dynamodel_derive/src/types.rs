@@ -174,15 +174,23 @@ impl Variant {
         token_from_str(&renamed)
     }
 
-    fn newtype_getter(&self, rule: &RenameRule) -> TokenStream {
+    fn newtype_getter(&self, tag: Option<&String>, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
         let renamed = self.renamed(rule);
 
         let getter = self.fields.fields[0].newtype_getter();
 
-        quote! {
-            if let Some(v) = item.get(stringify!(#renamed))#getter {
-                return Ok(Self::#name(v));
+        if tag.is_some() {
+            quote! {
+                stringify!(#renamed) => {
+                    return Ok(Self::#name(item.try_into()?));
+                }
+            }
+        } else {
+            quote! {
+                if let Some(v) = item.get(stringify!(#renamed))#getter {
+                    return Ok(Self::#name(v));
+                }
             }
         }
     }
@@ -201,24 +209,15 @@ impl Variant {
         }
     }
 
-    pub fn getters(&self, rule: &RenameRule) -> TokenStream {
+    pub fn getters(&self, tag: Option<&String>, rule: &RenameRule) -> TokenStream {
         if self.is_newtype() {
-            self.newtype_getter(rule)
+            self.newtype_getter(tag, rule)
         } else {
             self.named_getters(rule)
         }
     }
 
     fn newtype_setter(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
-        if tag.is_some() {
-            let ty = &self.fields.fields[0].ty.to_token_stream();
-            abort! {
-                self.span(), "Invalid attribute #[dynamodel(tag = ...)]";
-                note = "You cannot use tagged newtype variant containing \"{}\".", ty;
-                help = "Try removing #[dynamodel(tag = ...)].";
-            }
-        }
-
         let renamed_variant = self.renamed(rule);
         let renamed = quote! { stringify!(#renamed_variant).into() };
 
@@ -226,12 +225,24 @@ impl Variant {
         let ty = &self.fields.fields[0].ty;
         let value = into_attribute_value(ty);
 
-        quote! {
-            #name(v) => {
-                outer.insert(
-                    #renamed,
-                    ::aws_sdk_dynamodb::types::AttributeValue::#value,
-                );
+        if let Some(ref tag) = tag {
+            let tag = token_from_str(tag);
+
+            quote! {
+                #name(v) => {
+                    let mut item: Self = v.into();
+                    item.insert(
+                        stringify!(#tag).into(),
+                        ::aws_sdk_dynamodb::types::AttributeValue::S(#renamed),
+                    );
+                    item
+                }
+            }
+        } else {
+            quote! {
+                #name(v) => {
+                    [(#renamed, ::aws_sdk_dynamodb::types::AttributeValue::#value)].into()
+                }
             }
         }
     }
@@ -241,12 +252,13 @@ impl Variant {
         let field_names = self.fields.fields.iter().map(|f| &f.ident);
 
         let field_setters = self.field_setters();
-        let variant_setter = self.variant_setter_named(tag, rule);
+        let return_value = self.return_hashmap(tag, rule);
 
         quote! {
             #name { #(#field_names,)* } => {
+                let mut item: Self = ::std::collections::HashMap::new();
                 #(#field_setters)*
-                #variant_setter
+                #return_value
             }
         }
     }
@@ -266,7 +278,7 @@ impl Variant {
             .unwrap_or_default()
     }
 
-    fn variant_setter_named(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
+    fn return_hashmap(&self, tag: &Option<String>, rule: &RenameRule) -> TokenStream {
         let renamed_variant = self.renamed(rule);
         let renamed = quote! { stringify!(#renamed_variant).into() };
 
@@ -278,13 +290,11 @@ impl Variant {
                     stringify!(#tag).into(),
                     ::aws_sdk_dynamodb::types::AttributeValue::S(#renamed),
                 );
+                item
             }
         } else {
             quote! {
-                outer.insert(
-                    #renamed,
-                    ::aws_sdk_dynamodb::types::AttributeValue::M(item),
-                );
+                [(#renamed, ::aws_sdk_dynamodb::types::AttributeValue::M(item))].into()
             }
         }
     }

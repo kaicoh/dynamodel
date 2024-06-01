@@ -6,24 +6,12 @@ pub fn into_hashmap(
     variants: &[Variant],
     rule: &RenameRule,
 ) -> TokenStream {
-    let (init, return_value) = if tag.is_some() {
-        (quote!(), quote!(item))
-    } else {
-        (
-            quote! { let mut outer: Self = ::std::collections::HashMap::new(); },
-            quote! { outer },
-        )
-    };
-
     let branches = variants.iter().map(|v| v.setters(tag, rule));
 
     quote! {
-        #init
-        let mut item: Self = ::std::collections::HashMap::new();
         match value {
             #(#ident::#branches)*
         }
-        #return_value
     }
 }
 
@@ -41,7 +29,7 @@ pub fn try_from_hashmap(
 
 fn internally_tagged(tag: &String, variants: &[Variant], rule: &RenameRule) -> TokenStream {
     let tag_token = token_from_str(tag);
-    let branches = variants.iter().map(|v| v.getters(rule));
+    let branches = variants.iter().map(|v| v.getters(Some(tag), rule));
 
     quote! {
         let tag = item
@@ -86,7 +74,7 @@ fn externally_tagged_named_fields(variants: &[&Variant], rule: &RenameRule) -> T
         let renamed = v.renamed(rule);
         quote!(stringify!(#renamed))
     });
-    let branches = variants.iter().map(|&v| v.getters(rule));
+    let branches = variants.iter().map(|&v| v.getters(None, rule));
 
     quote! {
         for variant in [#(#names,)*] {
@@ -111,7 +99,7 @@ fn externally_tagged_newtype(variants: &[&Variant], rule: &RenameRule) -> TokenS
         return quote!();
     }
 
-    let branches = variants.iter().map(|&v| v.getters(rule));
+    let branches = variants.iter().map(|&v| v.getters(None, rule));
 
     quote! {
         #(#branches)*
