@@ -4,12 +4,12 @@ mod types;
 mod utils;
 
 use case::RenameRule;
-use darling::{util::WithOriginal, FromDeriveInput};
+use darling::FromDeriveInput;
 use impls::{enums, structs};
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
+use syn::{parse_macro_input, DeriveInput};
 
 // The main struct we get from parsing the attributes
 // Ref: https://github.com/TedDriggs/darling?tab=readme-ov-file#shape-validation
@@ -22,7 +22,7 @@ use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 struct TargetStruct {
     ident: syn::Ident,
     generics: syn::Generics,
-    data: darling::ast::Data<types::Variant, WithOriginal<types::Field, syn::Field>>,
+    data: darling::ast::Data<types::Variant, types::Field>,
     rename_all: Option<syn::Lit>,
     extra: Option<darling::Result<syn::Path>>,
     tag: Option<String>,
@@ -30,20 +30,33 @@ struct TargetStruct {
 
 impl TargetStruct {
     fn validate(self) -> darling::Result<Self> {
-        if let darling::ast::Data::Struct(fields) = &self.data {
-            if let Some(f) = fields
-                .fields
-                .iter()
-                .find(|f| f.parsed.try_from.is_some() && f.parsed.try_from_item.is_some())
-            {
-                abort! {
-                    f.original.span(), "Invalid attribute #[dynamodel(try_from = ..., try_from_item = ...)]";
-                    note = "Either `try_from` or `try_from_item` can be set.";
-                    help = "Try removing either `try_from` or `try_from_item`.";
+        match &self.data {
+            darling::ast::Data::Struct(fields) => {
+                for field in fields.fields.iter() {
+                    field.validate();
+                }
+            }
+            darling::ast::Data::Enum(variants) => {
+                for variant in variants {
+                    variant.validate();
                 }
             }
         }
+
         Ok(self)
+    }
+
+    fn extra(&self) -> Option<syn::Path> {
+        match self.extra.clone().transpose() {
+            Ok(v) => v,
+            Err(err) => {
+                abort! {
+                    err.span(), "Invalid attribute #[dynamodel(extra = ...)]";
+                    note = "Invalid argument for `extra` attribute. Only paths are allowed.";
+                    help = "Try formating the argument like `path::to::function` or `\"path::to::function\"`";
+                }
+            }
+        }
     }
 
     fn rename_rule(&self) -> RenameRule {
@@ -57,18 +70,11 @@ impl TargetStruct {
         let ident = &self.ident;
         let (imp, ty, whr) = self.generics.split_for_impl();
         let rename_rule = self.rename_rule();
+        let extra = self.extra();
 
-        let fields: Vec<types::Field> = self
-            .data
-            .take_struct()
-            .unwrap()
-            .fields
-            .into_iter()
-            .map(|f| f.parsed)
-            .collect();
+        let fields: Vec<types::Field> = self.data.take_struct().unwrap().fields;
 
-        let into_hashmap =
-            structs::into_hashmap(ident, &self.tag, &self.extra, &fields, &rename_rule);
+        let into_hashmap = structs::into_hashmap(ident, &self.tag, extra, &fields, &rename_rule);
         let try_from_hashmap = structs::try_from_hashmap(&fields, &rename_rule);
 
         quote! {

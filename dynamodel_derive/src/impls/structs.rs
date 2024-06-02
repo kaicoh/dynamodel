@@ -1,10 +1,9 @@
 use super::*;
-use proc_macro_error::abort;
 
 pub fn into_hashmap(
     ident: &syn::Ident,
     tag: &Option<String>,
-    extra: &Option<darling::Result<syn::Path>>,
+    extra: Option<syn::Path>,
     fields: &[Field],
     rule: &RenameRule,
 ) -> TokenStream {
@@ -42,30 +41,19 @@ fn set_hashmap_values(fields: &[Field], rule: &RenameRule) -> TokenStream {
     quote! { #(#setters)* }
 }
 
-fn init_hashmap(extra: &Option<darling::Result<syn::Path>>) -> TokenStream {
-    let init = match extra.as_ref() {
-        Some(Ok(path)) => {
-            quote! { #path(&value); }
-        }
-        Some(Err(err)) => {
-            abort! {
-                err.span(), "Invalid attribute #[dynamodel(extra = ...)]";
-                note = "Invalid argument for `extra` attribute. Only paths are allowed.";
-                help = "Try formating the argument like `path::to::function` or `\"path::to::function\"`";
-            }
-        }
-        None => {
-            quote! { ::std::collections::HashMap::new(); }
-        }
+fn init_hashmap(extra: Option<syn::Path>) -> TokenStream {
+    let init = match extra {
+        Some(path) => quote! { #path(&value); },
+        None => quote! { ::std::collections::HashMap::new(); },
     };
 
     quote! { let mut item: Self = #init }
 }
 
 pub fn try_from_hashmap(fields: &[Field], rule: &RenameRule) -> TokenStream {
-    let getters = fields.iter().map(|f| f.named_getter(rule));
+    let fields_token = fields.iter().map(|f| f.set_named_field_token(rule));
 
     quote! {
-        Ok(Self { #(#getters,)* })
+        Ok(Self { #(#fields_token,)* })
     }
 }

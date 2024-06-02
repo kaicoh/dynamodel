@@ -19,7 +19,17 @@ pub struct Field {
 }
 
 impl Field {
-    pub fn renamed(&self, rule: &RenameRule) -> TokenStream {
+    pub fn validate(&self) {
+        if self.try_from.is_some() && self.try_from_item.is_some() {
+            abort! {
+                self.try_from.clone().unwrap().span(), "Invalid attribute #[dynamodel(try_from = ..., try_from_item = ...)]";
+                note = "Either `try_from` or `try_from_item` can be set.";
+                help = "Try removing either `try_from` or `try_from_item`.";
+            }
+        }
+    }
+
+    fn renamed(&self, rule: &RenameRule) -> TokenStream {
         let field_name = &self.ident;
 
         if let Some(ref renamed_field) = self.rename {
@@ -31,8 +41,7 @@ impl Field {
         token_from_str(&renamed_field)
     }
 
-    // token to retrieve field value from the HashMap
-    pub fn named_getter(&self, rule: &RenameRule) -> TokenStream {
+    pub fn set_named_field_token(&self, rule: &RenameRule) -> TokenStream {
         let field_name = &self.ident;
         let ty = &self.ty;
         let field_not_set = not_set_err(field_name);
@@ -72,24 +81,6 @@ impl Field {
                         .ok_or(#field_not_set)
                         .and_then(|v| { #into_value })?
                 }
-            }
-        }
-    }
-
-    pub fn newtype_getter(&self) -> TokenStream {
-        let ty = &self.ty;
-
-        if inner_type_of("Option", ty).is_some() {
-            abort! {
-                ty.span(), "newtype variant with optional is not supported.";
-                note = "You cannot use tagged newtype variant containing an optional.";
-            }
-        } else {
-            let into_value = from_attribute_value(ty);
-
-            quote! {
-                .map(|v| #into_value)
-                .transpose()?
             }
         }
     }
@@ -158,8 +149,21 @@ impl ToTokens for Variant {
 }
 
 impl Variant {
-    pub fn is_newtype(&self) -> bool {
-        self.fields.is_newtype()
+    pub fn validate(&self) {
+        if self.is_newtype() {
+            let ty = &self.fields.fields[0].ty;
+
+            if inner_type_of("Option", ty).is_some() {
+                abort! {
+                    ty.span(), "newtype variant with optional is not supported.";
+                    note = "You cannot use tagged newtype variant containing an optional.";
+                }
+            }
+        } else {
+            for field in self.fields.fields.iter() {
+                field.validate();
+            }
+        }
     }
 
     pub fn renamed(&self, rule: &RenameRule) -> TokenStream {
@@ -174,46 +178,56 @@ impl Variant {
         token_from_str(&renamed)
     }
 
-    fn newtype_getter(&self, tag: Option<&String>, rule: &RenameRule) -> TokenStream {
+    pub fn is_newtype(&self) -> bool {
+        self.fields.is_newtype()
+    }
+
+    pub fn newtype_value_token(&self, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
         let renamed = self.renamed(rule);
 
-        let getter = self.fields.fields[0].newtype_getter();
+        let ty = &self.fields.fields[0].ty;
 
-        if tag.is_some() {
-            quote! {
-                stringify!(#renamed) => {
-                    return Ok(Self::#name(item.try_into()?));
-                }
-            }
-        } else {
-            quote! {
-                if let Some(v) = item.get(stringify!(#renamed))#getter {
-                    return Ok(Self::#name(v));
-                }
+        if inner_type_of("Option", ty).is_some() {
+            unreachable!("Variant.validate must be called before this method");
+        }
+
+        let into_value = from_attribute_value(ty);
+        let mapping = quote! { map(|v| #into_value).transpose()? };
+
+        quote! {
+            if let Some(v) = item.get(stringify!(#renamed)).#mapping {
+                return Ok(Self::#name(v));
             }
         }
     }
 
-    fn named_getters(&self, rule: &RenameRule) -> TokenStream {
+    pub fn newtype_value_token_tagged(&self, rule: &RenameRule) -> TokenStream {
+        let name = &self.ident;
+        let renamed = self.renamed(rule);
+
+        quote! {
+            stringify!(#renamed) => {
+                return Ok(Self::#name(item.try_into()?));
+            }
+        }
+    }
+
+    pub fn named_value_token(&self, rule: &RenameRule) -> TokenStream {
         let name = &self.ident;
         let renamed = self.renamed(rule);
 
         let rule = self.rename_rule_for_fields();
-        let getters = self.fields.fields.iter().map(|f| f.named_getter(&rule));
+        let fields_token = self
+            .fields
+            .fields
+            .iter()
+            .map(|f| f.set_named_field_token(&rule));
 
         quote! {
             stringify!(#renamed) => {
-                return Ok(Self::#name { #(#getters,)* });
+                return Ok(Self::#name { #(#fields_token,)* });
             }
-        }
-    }
-
-    pub fn getters(&self, tag: Option<&String>, rule: &RenameRule) -> TokenStream {
-        if self.is_newtype() {
-            self.newtype_getter(tag, rule)
-        } else {
-            self.named_getters(rule)
         }
     }
 

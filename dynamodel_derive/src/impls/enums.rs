@@ -29,7 +29,13 @@ pub fn try_from_hashmap(
 
 fn internally_tagged(tag: &String, variants: &[Variant], rule: &RenameRule) -> TokenStream {
     let tag_token = token_from_str(tag);
-    let branches = variants.iter().map(|v| v.getters(Some(tag), rule));
+    let branches = variants.iter().map(|v| {
+        if v.is_newtype() {
+            v.newtype_value_token_tagged(rule)
+        } else {
+            v.named_value_token(rule)
+        }
+    });
 
     quote! {
         let tag = item
@@ -74,7 +80,7 @@ fn externally_tagged_named_fields(variants: &[&Variant], rule: &RenameRule) -> T
         let renamed = v.renamed(rule);
         quote!(stringify!(#renamed))
     });
-    let branches = variants.iter().map(|&v| v.getters(None, rule));
+    let branches = variants.iter().map(|&v| v.named_value_token(rule));
 
     quote! {
         for variant in [#(#names,)*] {
@@ -99,7 +105,7 @@ fn externally_tagged_newtype(variants: &[&Variant], rule: &RenameRule) -> TokenS
         return quote!();
     }
 
-    let branches = variants.iter().map(|&v| v.getters(None, rule));
+    let branches = variants.iter().map(|&v| v.newtype_value_token(rule));
 
     quote! {
         #(#branches)*
