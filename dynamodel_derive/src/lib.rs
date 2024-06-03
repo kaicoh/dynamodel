@@ -66,32 +66,29 @@ impl TargetStruct {
             .unwrap_or_default()
     }
 
-    fn impl_traits(&self) -> impl Fn(TokenStream2, TokenStream2) -> TokenStream + '_ {
-        let ident = self.ident.clone();
+    fn impl_traits(self, from_impl: TokenStream2, try_from_impl: TokenStream2) -> TokenStream {
+        let ident = self.ident;
         let (imp, ty, whr) = self.generics.split_for_impl();
 
-        move |from_impl, try_from_impl| {
-            quote! {
-                impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
-                    fn from(value: #ident #ty) -> Self {
-                        #from_impl
-                    }
+        quote! {
+            impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
+                fn from(value: #ident #ty) -> Self {
+                    #from_impl
                 }
+            }
 
-                impl #imp ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident #ty #whr {
-                    type Error = ::dynamodel::ConvertError;
+            impl #imp ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident #ty #whr {
+                type Error = ::dynamodel::ConvertError;
 
-                    fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
-                        #try_from_impl
-                    }
+                fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
+                    #try_from_impl
                 }
-            }.into()
-        }
+            }
+        }.into()
     }
 
     fn struct_token(self) -> TokenStream {
         let ident = &self.ident;
-        let impl_traits = self.impl_traits();
         let rename_rule = self.rename_rule();
 
         let init_hashmap = match self.extra() {
@@ -141,12 +138,11 @@ impl TargetStruct {
             Ok(Self { #(#set_named_fields,)* })
         };
 
-        impl_traits(from_impl, try_from_impl)
+        self.impl_traits(from_impl, try_from_impl)
     }
 
     fn enum_token(self) -> TokenStream {
         let ident = &self.ident;
-        let impl_traits = self.impl_traits();
         let rename_rule = self.rename_rule();
 
         let variants: Vec<NamedVariant> = self
@@ -172,12 +168,11 @@ impl TargetStruct {
             Err(::dynamodel::ConvertError::VariantNotFound)
         };
 
-        impl_traits(from_impl, try_from_impl)
+        self.impl_traits(from_impl, try_from_impl)
     }
 
     fn enum_token_tagged(self) -> TokenStream {
         let ident = &self.ident;
-        let impl_traits = self.impl_traits();
         let rename_rule = self.rename_rule();
         let tag = self.tag.clone().unwrap();
         let tag_str = tag.as_str();
@@ -203,7 +198,7 @@ impl TargetStruct {
         let try_from_impl = quote! {
             let tag = item
                 .get(#tag_str)
-                .ok_or(::dynamodel::ConvertError::FieldNotSet(stringify!(#tag).into()))
+                .ok_or(::dynamodel::ConvertError::FieldNotSet(#tag_str.into()))
                 .and_then(|v| {
                     v.as_s().map_err(|e| {
                         ::dynamodel::ConvertError::AttributeValueUnmatched("S".into(), e.clone())
@@ -219,7 +214,7 @@ impl TargetStruct {
             Err(::dynamodel::ConvertError::VariantNotFound)
         };
 
-        impl_traits(from_impl, try_from_impl)
+        self.impl_traits(from_impl, try_from_impl)
     }
 
     fn token_stream(self) -> TokenStream {
