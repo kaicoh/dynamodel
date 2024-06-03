@@ -20,10 +20,6 @@ impl NamedField {
         &self.field.ty
     }
 
-    fn name_token(&self) -> TokenStream {
-        token_from_str(&self.name)
-    }
-
     fn attr_into(&self) -> Option<&syn::Expr> {
         self.field.into.as_ref()
     }
@@ -43,13 +39,13 @@ impl NamedField {
     pub fn set_named_field_token(&self) -> TokenStream {
         let field_name = self.ident();
         let ty = self.ty();
-        let hash_key = self.name_token();
+        let hash_key = self.name.as_str();
 
         if let Some(f) = self.attr_try_from_item() {
             return quote! { #field_name: #f(&item)? };
         }
 
-        let get_value = quote! { item.get(stringify!(#hash_key)) };
+        let get_value = quote! { item.get(#hash_key) };
         let field_not_set = not_set_err(field_name);
 
         if let Some(f) = self.attr_try_from() {
@@ -88,8 +84,8 @@ impl NamedField {
     {
         let field_name = self.ident();
         let ty = self.ty();
-        let name_token = self.name_token();
-        let hash_key = quote! { stringify!(#name_token).into() };
+        let name = self.name.as_str();
+        let hash_key = quote! { #name.into() };
 
         let get_value_token = get_value(field_name);
 
@@ -219,15 +215,11 @@ impl NamedVariant {
         self.variant.fields.is_newtype()
     }
 
-    fn name_token(&self) -> TokenStream {
-        token_from_str(&self.name)
-    }
-
     fn newtype_value_token(&self) -> TokenStream {
         self.assert_newtype();
 
         let ident = self.ident();
-        let hash_key = self.name_token();
+        let hash_key = self.name.as_str();
 
         let fields = self.fields();
         let ty = fields[0].ty();
@@ -240,7 +232,7 @@ impl NamedVariant {
 
         quote! {
             if let Some(v) = item
-                .get(stringify!(#hash_key))
+                .get(#hash_key)
                 .map(|v| #into_value)
                 .transpose()?
             {
@@ -253,10 +245,10 @@ impl NamedVariant {
         self.assert_newtype();
 
         let ident = self.ident();
-        let name = self.name_token();
+        let name = self.name.as_str();
 
         quote! {
-            stringify!(#name) => {
+            #name => {
                 return Ok(Self::#ident(item.try_into()?));
             }
         }
@@ -264,7 +256,7 @@ impl NamedVariant {
 
     fn named_value_token(&self) -> TokenStream {
         let ident = self.ident();
-        let hash_key = self.name_token();
+        let hash_key = self.name.as_str();
         let err = unmatch_err("M");
 
         let fields = self.fields();
@@ -272,7 +264,7 @@ impl NamedVariant {
 
         quote! {
             if let Some(ref item) = item
-                .get(stringify!(#hash_key))
+                .get(#hash_key)
                 .map(|v| v.as_m().map_err(|e| #err))
                 .transpose()?
             {
@@ -283,24 +275,23 @@ impl NamedVariant {
 
     fn named_value_token_tagged(&self) -> TokenStream {
         let ident = self.ident();
-        let name = self.name_token();
+        let name = self.name.as_str();
 
         let fields = self.fields();
         let fields_token = fields.iter().map(NamedField::set_named_field_token);
 
         quote! {
-            stringify!(#name) => {
+            #name => {
                 return Ok(Self::#ident { #(#fields_token,)* });
             }
         }
     }
 
     fn set_newtype_key_value(&self) -> TokenStream {
-        let ident = self.ident();
+        self.assert_newtype();
 
-        // TODO: is this right way?
-        let name_token = self.name_token();
-        let name = quote! { stringify!(#name_token).into() };
+        let ident = self.ident();
+        let name = self.name.as_str();
 
         let fields = self.fields();
         let ty = fields[0].ty();
@@ -308,27 +299,23 @@ impl NamedVariant {
 
         quote! {
             #ident(v) => {
-                [(#name, ::aws_sdk_dynamodb::types::AttributeValue::#value)].into()
+                [(#name.into(), ::aws_sdk_dynamodb::types::AttributeValue::#value)].into()
             }
         }
     }
 
-    fn set_tagged_newtype_key_value(&self, tag: &String) -> TokenStream {
+    fn set_tagged_newtype_key_value(&self, tag: &str) -> TokenStream {
+        self.assert_newtype();
+
         let ident = self.ident();
-
-        // TODO: is this right way?
-        let name_token = self.name_token();
-        let name = quote! { stringify!(#name_token).into() };
-
-        // TODO: is this right way?
-        let tag = token_from_str(tag);
+        let name = self.name.as_str();
 
         quote! {
             #ident(v) => {
                 let mut item: Self = v.into();
                 item.insert(
-                    stringify!(#tag).into(),
-                    ::aws_sdk_dynamodb::types::AttributeValue::S(#name),
+                    #tag.into(),
+                    ::aws_sdk_dynamodb::types::AttributeValue::S(#name.into()),
                 );
                 item
             }
@@ -336,29 +323,21 @@ impl NamedVariant {
     }
 
     fn set_named_key_value(&self) -> TokenStream {
-        // TODO: is this right way?
-        let name_token = self.name_token();
-        let name = quote! { stringify!(#name_token).into() };
-
+        let name = self.name.as_str();
         let return_token = quote! {
-            [(#name, ::aws_sdk_dynamodb::types::AttributeValue::M(item))].into()
+            [(#name.into(), ::aws_sdk_dynamodb::types::AttributeValue::M(item))].into()
         };
 
         self.set_key_value_branch(return_token)
     }
 
-    fn set_tagged_named_key_value(&self, tag: &String) -> TokenStream {
-        // TODO: is this right way?
-        let name_token = self.name_token();
-        let name = quote! { stringify!(#name_token).into() };
-
-        // TODO: is this right way?
-        let tag = token_from_str(tag);
+    fn set_tagged_named_key_value(&self, tag: &str) -> TokenStream {
+        let name = self.name.as_str();
 
         let return_token = quote! {
             item.insert(
-                stringify!(#tag).into(),
-                ::aws_sdk_dynamodb::types::AttributeValue::S(#name),
+                #tag.into(),
+                ::aws_sdk_dynamodb::types::AttributeValue::S(#name.into()),
             );
             item
         };
@@ -390,7 +369,7 @@ impl NamedVariant {
         }
     }
 
-    pub fn set_tagged_key_value(&self, tag: &String) -> TokenStream {
+    pub fn set_tagged_key_value(&self, tag: &str) -> TokenStream {
         if self.is_newtype() {
             self.set_tagged_newtype_key_value(tag)
         } else {

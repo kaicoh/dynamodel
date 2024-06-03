@@ -8,6 +8,7 @@ use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
+use types::{NamedField, NamedVariant};
 
 // The main struct we get from parsing the attributes
 // Ref: https://github.com/TedDriggs/darling?tab=readme-ov-file#shape-validation
@@ -85,7 +86,7 @@ impl TargetStruct {
             quote!()
         };
 
-        let fields: Vec<types::NamedField> = self
+        let fields: Vec<NamedField> = self
             .data
             .take_struct()
             .unwrap()
@@ -102,7 +103,7 @@ impl TargetStruct {
             }
         });
 
-        let set_named_fields = fields.iter().map(types::NamedField::set_named_field_token);
+        let set_named_fields = fields.iter().map(NamedField::set_named_field_token);
 
         quote! {
             impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
@@ -129,7 +130,7 @@ impl TargetStruct {
         let (imp, ty, whr) = self.generics.split_for_impl();
         let rename_rule = self.rename_rule();
 
-        let variants: Vec<types::NamedVariant> = self
+        let variants: Vec<NamedVariant> = self
             .data
             .take_enum()
             .unwrap()
@@ -137,8 +138,8 @@ impl TargetStruct {
             .map(|v| v.into_named(&rename_rule))
             .collect();
 
-        let set_key_value_branch = variants.iter().map(types::NamedVariant::set_key_value);
-        let get_values = variants.iter().map(types::NamedVariant::get_value_token);
+        let set_key_value_branch = variants.iter().map(NamedVariant::set_key_value);
+        let get_values = variants.iter().map(NamedVariant::get_value_token);
 
         quote! {
             impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
@@ -165,9 +166,9 @@ impl TargetStruct {
         let (imp, ty, whr) = self.generics.split_for_impl();
         let rename_rule = self.rename_rule();
         let tag = self.tag.unwrap();
-        let tag_token = utils::token_from_str(&tag);
+        let tag_str = tag.as_str();
 
-        let variants: Vec<types::NamedVariant> = self
+        let variants: Vec<NamedVariant> = self
             .data
             .take_enum()
             .unwrap()
@@ -176,9 +177,7 @@ impl TargetStruct {
             .collect();
 
         let set_key_value_branch = variants.iter().map(|v| v.set_tagged_key_value(&tag));
-        let get_values = variants
-            .iter()
-            .map(types::NamedVariant::get_value_token_tagged);
+        let get_values = variants.iter().map(NamedVariant::get_value_token_tagged);
 
         quote! {
             impl #imp ::std::convert::From<#ident #ty> for ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue> #whr {
@@ -194,7 +193,7 @@ impl TargetStruct {
 
                 fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
                     let tag = item
-                        .get(stringify!(#tag_token))
+                        .get(#tag_str)
                         .ok_or(::dynamodel::ConvertError::FieldNotSet(stringify!(#tag).into()))
                         .and_then(|v| {
                             v.as_s().map_err(|e| {
