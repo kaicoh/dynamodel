@@ -5,4 +5,4 @@ use std::collections::HashMap;
 #[macro_use]
 mod macros;
 
-mod enums;
+mod enum_newtype;

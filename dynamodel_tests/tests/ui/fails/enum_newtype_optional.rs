@@ -2,8 +2,7 @@ use dynamodel::Dynamodel;
 
 #[derive(Dynamodel)]
 enum NewType {
-    Str(String),
-    Int(i64),
+    Str(Option<String>),
 }
 
 fn main() {}

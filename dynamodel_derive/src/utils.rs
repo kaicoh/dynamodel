@@ -1,9 +1,3 @@
-use proc_macro2::TokenStream;
-
-pub fn token_from_str(value: &String) -> TokenStream {
-    value.to_owned().parse().unwrap()
-}
-
 pub fn is_string(ty: &syn::Type) -> bool {
     type_is("String", ty)
 }
