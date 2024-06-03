@@ -91,43 +91,140 @@
 //! | `#[dynamodel(into = "...")]`| `field type` | `AttributeValue` |
 //! | `#[dynamodel(try_from = "...")]` | `&AttributeValue` | `Result<field type, ConvertError>` |
 //!
+//! ## Example
+//!
+//! ### Single-table design
+//!
+//! The following diagram shows that both `Video` and `VideoStats` are stored in the same table.
+//!
+//! ![videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table.png?raw=true)
+//!
+//! ```rust
+//! use dynamodel::{Dynamodel, ConvertError};
+//! # use std::collections::HashMap;
+//! # use aws_sdk_dynamodb::{types::AttributeValue, primitives::Blob};
+//!
+//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
+//! #[dynamodel(extra = "VideoStats::sort_key", rename_all = "PascalCase")]
+//! struct VideoStats {
+//!     #[dynamodel(rename = "PK")]
+//!     id: String,
+//!     view_count: u64,
+//! }
+//!
+//! impl VideoStats {
+//!     fn sort_key(&self) -> HashMap<String, AttributeValue> {
+//!         [
+//!             ("SK".to_string(), AttributeValue::S("VideoStats".into())),
+//!         ].into()
+//!     }
+//! }
+//!
+//! let stats = VideoStats {
+//!     id: "7cf27a02".into(),
+//!     view_count: 147,
+//! };
+//!
+//! let item: HashMap<String, AttributeValue> = [
+//!     ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
+//!     ("SK".to_string(), AttributeValue::S("VideoStats".into())),
+//!     ("ViewCount".to_string(), AttributeValue::N("147".into())),
+//! ].into();
+//!
+//! let converted: HashMap<String, AttributeValue> = stats.clone().into();
+//! assert_eq!(converted, item);
+//!
+//! let converted: VideoStats = item.try_into().unwrap();
+//! assert_eq!(converted, stats);
+//! ```
+//!
+//! And suppose you want to add a `VideoComment` object that is sortable by timestamp,
+//! like this.
+//!
+//! ![video comments object](https://github.com/kaicoh/dynamodel/blob/images/videos_table_2.png?raw=true)
+//!
+//! ```rust
+//! use dynamodel::{Dynamodel, ConvertError};
+//! # use std::collections::HashMap;
+//! # use aws_sdk_dynamodb::{types::AttributeValue, primitives::Blob};
+//!
+//! #[derive(Dynamodel, Debug, Clone, PartialEq)]
+//! #[dynamodel(rename_all = "PascalCase")]
+//! struct VideoComment {
+//!     #[dynamodel(rename = "PK")]
+//!     id: String,
+//!     #[dynamodel(rename = "SK", into = "sort_key", try_from = "get_timestamp")]
+//!     timestamp: String,
+//!     content: String,
+//! }
+//!
+//! fn sort_key(timestamp: String) -> AttributeValue {
+//!     AttributeValue::S(format!("VideoComment#{timestamp}"))
+//! }
+//!
+//! fn get_timestamp(value: &AttributeValue) -> Result<String, ConvertError> {
+//!     value.as_s()
+//!         .map(|v| v.split('#').last().unwrap().to_string())
+//!         .map_err(|e| ConvertError::AttributeValueUnmatched("S".into(), e.clone()))
+//! }
+//!
+//! let comment = VideoComment {
+//!     id: "7cf27a02".into(),
+//!     content: "Good video!".into(),
+//!     timestamp: "2023-04-05T12:34:56".into(),
+//! };
+//!
+//! let item: HashMap<String, AttributeValue> = [
+//!     ("PK".to_string(), AttributeValue::S("7cf27a02".into())),
+//!     ("SK".to_string(), AttributeValue::S("VideoComment#2023-04-05T12:34:56".into())),
+//!     ("Content".to_string(), AttributeValue::S("Good video!".into())),
+//! ].into();
+//!
+//! let converted: HashMap<String, AttributeValue> = comment.clone().into();
+//! assert_eq!(converted, item);
+//!
+//! let converted: VideoComment = item.try_into().unwrap();
+//! assert_eq!(converted, comment);
+//! ```
+//!
 //! ## More features
 //!
 //! For more features, refer to [this wiki](https://github.com/kaicoh/dynamodel/wiki).
 
-/// Derive macro to implement conversion between your struct and
-/// [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
+/// Derive macro to implement both `Into<HashMap<String, AttributeValue>>` and `TryFrom<HashMap<String, AttributeValue>>` traits.
+///
+/// For details, refer to [the wiki](https://github.com/kaicoh/dynamodel/wiki).
 pub use dynamodel_derive::Dynamodel;
 
 use aws_sdk_dynamodb::types::AttributeValue;
 use std::num::{ParseFloatError, ParseIntError};
 use thiserror::Error;
 
-/// A conversion error from [AttributeValue] to your struct field.
+/// An error occurs when converting from a `HashMap<String, AttributeValue>` to your object.
 #[derive(Debug, Error)]
 pub enum ConvertError {
-    /// Occurs when the [HashMap](std::collections::HashMap)<[String], [AttributeValue]> has no key value pair for the field.
+    /// There is no key-value pair for this field in the HashMap.
     #[error("`{0}` field is not set")]
     FieldNotSet(String),
 
-    /// Occurs when the [HashMap](std::collections::HashMap)<[String], [AttributeValue]> has a key value pair for the field but its variant is match.
+    /// There is a key-value pair for the field, but the type of AttributeValue is not what is expected.
     #[error("expect `{0}` type, but got `{1:?}`")]
     AttributeValueUnmatched(String, AttributeValue),
 
-    /// Occurs when parsing string into integer value.
+    /// The value in the HashMap should be an integer, but it isn't.
     #[error("{0}")]
     ParseInt(#[from] ParseIntError),
 
-    /// Occurs when parsing string into float value.
+    /// The value in the HashMap should be a float, but it isn't.
     #[error("{0}")]
     ParseFloat(#[from] ParseFloatError),
 
-    /// Not found any variant when parsing HashMap from enum.
+    /// There are no vairants for the enum in the HashMap.
     #[error("not found any variant in hashmap")]
     VariantNotFound,
 
-    /// Any error when converting. You can use this wrapper to implement your original conversion
-    /// methods.
+    /// Any other errors when converting from a HashMap to your object.
+    /// You can wrap your original errors in this variant.
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync>),
 }

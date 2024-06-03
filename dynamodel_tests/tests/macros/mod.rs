@@ -16,6 +16,7 @@ macro_rules! assert_attribute_unmatch {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_field_not_set {
     ($result:expr, $expect_attr:tt $(,)?) => {
         match $result {

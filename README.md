@@ -93,6 +93,58 @@ The function definition must meet these conditions.
 | `#[dynamodel(into = "...")]`| `field type` | `AttributeValue` |
 | `#[dynamodel(try_from = "...")]` | `&AttributeValue` | `Result<field type, ConvertError>` |
 
+## Example
+
+### Single-table design
+
+The following diagram shows that both `Video` and `VideoStats` are stored in the same table.
+
+![videos table](https://github.com/kaicoh/dynamodel/blob/images/videos_table.png?raw=true)
+
+```rust
+#[derive(Dynamodel)]
+#[dynamodel(extra = "VideoStats::sort_key", rename_all = "PascalCase")]
+struct VideoStats {
+    #[dynamodel(rename = "PK")]
+    id: String,
+    view_count: u64,
+}
+
+impl VideoStats {
+    fn sort_key(&self) -> HashMap<String, AttributeValue> {
+        [
+            ("SK".to_string(), AttributeValue::S("VideoStats".into())),
+        ].into()
+    }
+}
+```
+
+And suppose you want to add a `VideoComment` object that is sortable by timestamp, like this.
+
+![video comments object](https://github.com/kaicoh/dynamodel/blob/images/videos_table_2.png?raw=true)
+
+```rust
+#[derive(Dynamodel)]
+#[dynamodel(rename_all = "PascalCase")]
+struct VideoComment {
+    #[dynamodel(rename = "PK")]
+    id: String,
+    #[dynamodel(rename = "SK", into = "sort_key", try_from = "get_timestamp")]
+    timestamp: String,
+    content: String,
+}
+
+fn sort_key(timestamp: String) -> AttributeValue {
+    AttributeValue::S(format!("VideoComment#{timestamp}"))
+}
+
+fn get_timestamp(value: &AttributeValue) -> Result<String, ConvertError> {
+    value.as_s()
+        .map(|v| v.split('#').last().unwrap().to_string())
+        .map_err(|e| ConvertError::AttributeValueUnmatched("S".into(), e.clone()))
+}
+```
+
 ## More features
 
 For more features, refer to [this wiki](https://github.com/kaicoh/dynamodel/wiki).
