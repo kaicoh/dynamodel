@@ -80,7 +80,7 @@ impl TargetStruct {
             impl #imp ::std::convert::TryFrom<::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>> for #ident #ty #whr {
                 type Error = ::dynamodel::ConvertError;
 
-                fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> Result<Self, Self::Error> {
+                fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> ::std::result::Result<Self, Self::Error> {
                     #try_from_impl
                 }
             }
