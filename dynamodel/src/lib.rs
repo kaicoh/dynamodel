@@ -3,6 +3,47 @@
 //! This library provides a derive macro to implement conversions between your object and
 //! [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
 //!
+//! ## Derive macro [`Dynamodel`]
+//!
+//! The [`Dynamodel`] derive macro implements these three traits to use
+//! [`aws-sdk-dynamodb`](https://crates.io/crates/aws-sdk-dynamodb) more comfortably.
+//!
+//! * `Into<HashMap<String, AttributeValue>>`
+//! * `TryFrom<HashMap<String, AttributeValue>>`
+//! * The [`AttributeValueConvertible`] trait enables the types that implement it to be converted from and to `AttributeValue`.
+//!
+//! ```ignore
+//! #[derive(Dynamodel)]        Convertible
+//! struct YourStruct { ... }  <===========>  HashMap<String, AttributeValue>
+//!
+//! #[derive(Dynamodel)]    Convertible
+//! enum YourEnum { ... }  <===========>  HashMap<String, AttributeValue>
+//! ```
+//!
+//! ### Requirements to use [`Dynamodel`]
+//!
+//! To use the [`Dynamodel`] macro, all types of your object's fields must implement
+//! the `AttributeValueConvertible` trait.
+//!
+//! By default, these types automatically implement the [`AttributeValueConvertible`]
+//! trait, so no additional code is required when using these types.
+//!
+//! | Type | `AttributeValue` variant |
+//! |---|---|
+//! | `String` | `AttributeValue::S("...")` |
+//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N("...")` |
+//! | `bool` | `AttributeValue::Bool(...)` |
+//! | `Vec` of any types that implement `AttributeValueConvertible` | `AttributeValue::L([...])` |
+//! | Any types that implement `Dynamodel` macro | `AttributeValue::M({ ... })` |
+//!
+//! The last row of the above table shows that once you apply the [`Dynamodel`] macro to your object,
+//! it also implements the [`AttributeValueConvertible`] trait for your object.
+//!
+//! **So, you can create nested structures of objects that apply the [`Dynamodel`] macro.**
+//!
+//! If you want to use additional types, you need to implement the `AttributeValueConvertible`
+//! trait for your type.
+//!
 //! ## Usage
 //!
 //! ```rust
@@ -10,9 +51,6 @@
 //! # use std::collections::HashMap;
 //! # use aws_sdk_dynamodb::types::AttributeValue;
 //!
-//! // Using `Dynamodel` macro, you can implement both
-//! // `From<your struct> for HashMap<String, AttributeValue>` and
-//! // `TryFrom<HashMap<String, AttributeValue>> for your struct` traits.
 //! #[derive(Dynamodel, Debug, Clone, PartialEq)]
 //! struct Person {
 //!     first_name: String,
@@ -42,23 +80,10 @@
 //! assert_eq!(converted, person);
 //! ```
 //!
-//! ## Implicit conversion
+//! ### Modifying the default behavior
 //!
-//! This macro implicitly converts some types, so you don't have to add any code. The types are
-//! as follows.
-//!
-//! | Type | AttributeValue variant | Condition |
-//! |---|---|---|
-//! | `String` | `AttributeValue::S` | none |
-//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N` | none |
-//! | `bool` | `AttributeValue::Bool` | none |
-//! | Any structs or enums | `AttributeValue::M` | must implement both<br>`Into<HashMap<String, AttributeValue>>`<br>and<br>`TryFrom<HashMap<String, AttributeValue>, Error = ConvertError>` |
-//! | `Vec<inner type>` | `AttributeValue::L` | the inner type must be one of the implicit conversion types. |
-//! | `Option<inner type>` | Depends on the inner type | the inner type must be one of the implicit conversion types. |
-//!
-//! ## Explicit conversion
-//!
-//! Using the field attribute, you can implement custom conversion methods for any type like this.
+//! Like the [`Serde`](https://crates.io/crates/serde) crate, you can modify the default behavior
+//! through attributes like this.
 //!
 //! ```rust
 //! use dynamodel::{Dynamodel, ConvertError};
