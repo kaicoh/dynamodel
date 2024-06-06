@@ -1,4 +1,4 @@
-use super::{case::RenameRule, utils::*};
+use super::case::RenameRule;
 use darling::{FromField, FromVariant};
 use proc_macro2::TokenStream;
 use proc_macro_error::abort;
@@ -56,24 +56,17 @@ impl NamedField {
             };
         }
 
-        match inner_type_of("Option", ty) {
-            Some(ty) => {
-                let into_value = from_attribute_value(ty);
-
-                quote! {
-                    #field_name: #get_value
-                        .map(|v| { #into_value })
-                        .transpose()?
-                }
+        if is_optional(ty) {
+            quote! {
+                #field_name: #get_value
+                    .map(::dynamodel::AttributeValueConvertible::try_from_attribute_value)
+                    .transpose()?
             }
-            None => {
-                let into_value = from_attribute_value(ty);
-
-                quote! {
-                    #field_name: #get_value
-                        .ok_or(#field_not_set)
-                        .and_then(|v| { #into_value })?
-                }
+        } else {
+            quote! {
+                #field_name: #get_value
+                    .ok_or(#field_not_set)
+                    .and_then(::dynamodel::AttributeValueConvertible::try_from_attribute_value)?
             }
         }
     }
@@ -96,29 +89,22 @@ impl NamedField {
             };
         }
 
-        match inner_type_of("Option", ty) {
-            Some(ty) => {
-                let variant = into_attribute_value(ty);
-
-                quote! {
-                    if let Some(v) = #get_value_token {
-                        item.insert(
-                            #hash_key,
-                            ::aws_sdk_dynamodb::types::AttributeValue::#variant,
-                        );
-                    }
-                }
-            }
-            None => {
-                let variant = into_attribute_value(ty);
-
-                quote! {
-                    let v = #get_value_token;
+        if is_optional(ty) {
+            quote! {
+                if let Some(v) = #get_value_token {
                     item.insert(
                         #hash_key,
-                        ::aws_sdk_dynamodb::types::AttributeValue::#variant,
+                        ::dynamodel::AttributeValueConvertible::into_attribute_value(v),
                     );
                 }
+            }
+        } else {
+            quote! {
+                let v = #get_value_token;
+                item.insert(
+                    #hash_key,
+                    ::dynamodel::AttributeValueConvertible::into_attribute_value(v),
+                );
             }
         }
     }
@@ -224,18 +210,19 @@ impl NamedVariant {
         let fields = self.fields();
         let ty = fields[0].ty();
 
-        if inner_type_of("Option", ty).is_some() {
-            unreachable!("Variant.validate must be called before this method");
-        }
-
-        let into_value = from_attribute_value(ty);
+        let transform = if is_optional(ty) {
+            quote! {
+                |v| match v {
+                    ::aws_sdk_dynamodb::types::AttributeValue::Null(_) => Ok(None),
+                    _ => ::dynamodel::AttributeValueConvertible::try_from_attribute_value(v).map(|v| Some(v))
+                }
+            }
+        } else {
+            quote! { ::dynamodel::AttributeValueConvertible::try_from_attribute_value }
+        };
 
         quote! {
-            if let Some(v) = item
-                .get(#hash_key)
-                .map(|v| #into_value)
-                .transpose()?
-            {
+            if let Some(v) = item.get(#hash_key).map(#transform).transpose()? {
                 return Ok(Self::#ident(v));
             }
         }
@@ -247,9 +234,25 @@ impl NamedVariant {
         let ident = self.ident();
         let name = self.name.as_str();
 
-        quote! {
-            #name => {
-                return Ok(Self::#ident(item.try_into()?));
+        let fields = self.fields();
+        let ty = fields[0].ty();
+
+        if is_optional(ty) {
+            quote! {
+                #name => {
+                    let v = ::aws_sdk_dynamodb::types::AttributeValue::M(item);
+                    let inner = ::dynamodel::AttributeValueConvertible::try_from_attribute_value(&v)
+                        .map(|v| Some(v))
+                        .unwrap_or(None);
+                    return Ok(Self::#ident(inner));
+                }
+            }
+        } else {
+            quote! {
+                #name => {
+                    let v = ::aws_sdk_dynamodb::types::AttributeValue::M(item);
+                    return Ok(Self::#ident(::dynamodel::AttributeValueConvertible::try_from_attribute_value(&v)?));
+                }
             }
         }
     }
@@ -295,11 +298,19 @@ impl NamedVariant {
 
         let fields = self.fields();
         let ty = fields[0].ty();
-        let value = into_attribute_value(ty);
+
+        let attribute_value = if is_optional(ty) {
+            quote! {
+                v.map(::dynamodel::AttributeValueConvertible::into_attribute_value)
+                    .unwrap_or(::aws_sdk_dynamodb::types::AttributeValue::Null(true))
+            }
+        } else {
+            quote! { ::dynamodel::AttributeValueConvertible::into_attribute_value(v) }
+        };
 
         quote! {
             #ident(v) => {
-                [(#name.into(), ::aws_sdk_dynamodb::types::AttributeValue::#value)].into()
+                [(#name.into(), #attribute_value)].into()
             }
         }
     }
@@ -310,9 +321,18 @@ impl NamedVariant {
         let ident = self.ident();
         let name = self.name.as_str();
 
+        let fields = self.fields();
+        let ty = fields[0].ty();
+
+        let init_hashmap = if is_optional(ty) {
+            quote! { v.map(Self::from).unwrap_or_else(Self::new); }
+        } else {
+            quote! { v.into(); }
+        };
+
         quote! {
             #ident(v) => {
-                let mut item: Self = v.into();
+                let mut item: Self = #init_hashmap
                 item.insert(
                     #tag.into(),
                     ::aws_sdk_dynamodb::types::AttributeValue::S(#name.into()),
@@ -396,19 +416,8 @@ impl ToTokens for Variant {
 
 impl Variant {
     pub fn validate(&self) {
-        if self.fields.is_newtype() {
-            let ty = &self.fields.fields[0].ty;
-
-            if inner_type_of("Option", ty).is_some() {
-                abort! {
-                    ty.span(), "newtype variant with optional is not supported.";
-                    note = "You cannot use tagged newtype variant containing an optional.";
-                }
-            }
-        } else {
-            for field in self.fields.fields.iter() {
-                field.validate();
-            }
+        for field in self.fields.fields.iter() {
+            field.validate();
         }
     }
 
@@ -425,166 +434,6 @@ impl Variant {
     }
 }
 
-fn into_attribute_value(ty: &syn::Type) -> TokenStream {
-    if is_string(ty) {
-        return quote! { S(v) };
-    }
-
-    if is_bool(ty) {
-        return quote! { Bool(v) };
-    }
-
-    if is_number(ty) {
-        return quote! { N(v.to_string()) };
-    }
-
-    if is_string_vec(ty) {
-        return quote! {
-            L(v.into_iter()
-              .map(::aws_sdk_dynamodb::types::AttributeValue::S)
-              .collect())
-        };
-    }
-
-    if is_bool_vec(ty) {
-        return quote! {
-            L(v.into_iter()
-              .map(::aws_sdk_dynamodb::types::AttributeValue::Bool)
-              .collect())
-        };
-    }
-
-    if is_number_vec(ty) {
-        return quote! {
-            L(v.into_iter()
-              .map(|v| ::aws_sdk_dynamodb::types::AttributeValue::N(v.to_string()))
-              .collect())
-        };
-    }
-
-    if is_any_vec(ty) {
-        return quote! {
-            L(v.into_iter()
-              .map(|v| ::aws_sdk_dynamodb::types::AttributeValue::M(v.into()))
-              .collect())
-        };
-    }
-
-    quote! { M(v.into()) }
-}
-
-fn from_attribute_value(ty: &syn::Type) -> TokenStream {
-    if is_string(ty) {
-        let err = unmatch_err("S");
-        return quote! {
-            v.as_s().map(|val| val.clone()).map_err(|e| #err)
-        };
-    }
-
-    if is_bool(ty) {
-        let err = unmatch_err("Bool");
-        return quote! {
-            v.as_bool().map(|val| *val).map_err(|e| #err)
-        };
-    }
-
-    if is_number(ty) {
-        let err = unmatch_err("N");
-        return quote! {
-            v.as_n().map_err(|e| #err)
-                .and_then(|val| val.parse::<#ty>().map_err(|e| e.into()))
-        };
-    }
-
-    if is_string_vec(ty) {
-        let err = unmatch_err("S");
-        return l_wrapper(
-            &quote!(String),
-            quote! {
-                match i.as_s() {
-                    Ok(v) => {
-                        values.push(v.clone());
-                    }
-                    Err(e) => {
-                        return Err(#err);
-                    }
-                }
-            },
-        );
-    }
-
-    if is_bool_vec(ty) {
-        let err = unmatch_err("Bool");
-        return l_wrapper(
-            &quote!(bool),
-            quote! {
-                match i.as_bool() {
-                    Ok(v) => {
-                        values.push(*v);
-                    }
-                    Err(e) => {
-                        return Err(#err);
-                    }
-                }
-            },
-        );
-    }
-
-    if is_number_vec(ty) {
-        let err = unmatch_err("N");
-        if let Some(inner_ty) = inner_type(ty) {
-            return l_wrapper(
-                inner_ty,
-                quote! {
-                    match i.as_n().map(|val| val.parse::<#inner_ty>()) {
-                        Ok(Ok(v)) => {
-                            values.push(v);
-                        }
-                        Ok(Err(e)) => {
-                            return Err(e.into());
-                        }
-                        Err(e) => {
-                            return Err(#err);
-                        }
-                    }
-                },
-            );
-        } else {
-            unreachable!("expect a vector of number, got {ty:#?}");
-        }
-    }
-
-    if is_any_vec(ty) {
-        let err = unmatch_err("M");
-        if let Some(inner_ty) = inner_type(ty) {
-            return l_wrapper(
-                inner_ty,
-                quote! {
-                    match i.as_m().map(|val| #inner_ty::try_from(val.clone())) {
-                        Ok(Ok(v)) => {
-                            values.push(v);
-                        }
-                        Ok(Err(e)) => {
-                            return Err(e);
-                        }
-                        Err(e) => {
-                            return Err(#err);
-                        }
-                    }
-                },
-            );
-        } else {
-            unreachable!("expect a vector of model implementing TryFrom<HashMap<String, AttributeValue>>, got {ty:#?}");
-        }
-    }
-
-    let err = unmatch_err("M");
-    quote! {
-        v.as_m().map_err(|e| #err)
-            .and_then(|val| #ty::try_from(val.clone()))
-    }
-}
-
 fn not_set_err(ident: &Option<syn::Ident>) -> TokenStream {
     quote! {
         ::dynamodel::ConvertError::FieldNotSet(stringify!(#ident).into())
@@ -597,13 +446,17 @@ fn unmatch_err(ty: &str) -> TokenStream {
     }
 }
 
-fn l_wrapper(ty: &impl ToTokens, token: TokenStream) -> TokenStream {
-    let l_err = unmatch_err("L");
-    quote! {
-        v.as_l().map_err(|e| #l_err).and_then(|l| {
-            let mut values: Vec<#ty> = vec![];
-            for i in l.iter() { #token }
-            Ok(values)
-        })
+static OPTIONS_TYPE: [&str; 3] = ["Option|", "std|option|Option|", "core|option|Option|"];
+
+fn is_optional(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(p) = ty {
+        let idents_of_path = p.path.segments.iter().fold(String::new(), |mut acc, v| {
+            acc.push_str(&v.ident.to_string());
+            acc.push('|');
+            acc
+        });
+        OPTIONS_TYPE.contains(&idents_of_path.as_str())
+    } else {
+        false
     }
 }

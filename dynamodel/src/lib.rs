@@ -239,14 +239,14 @@ fn unmatch_err(expected: &str) -> impl Fn(&AttributeValue) -> ConvertError + '_ 
 /// implicitly converted from and into [`AttributeValue`].
 pub trait AttributeValueConvertible: Sized {
     fn into_attribute_value(self) -> AttributeValue;
-    fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError>;
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError>;
 }
 
 impl AttributeValueConvertible for String {
     fn into_attribute_value(self) -> AttributeValue {
         AttributeValue::S(self)
     }
-    fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError> {
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
         value
             .as_s()
             .map(|v| v.to_string())
@@ -258,7 +258,7 @@ impl AttributeValueConvertible for bool {
     fn into_attribute_value(self) -> AttributeValue {
         AttributeValue::Bool(self)
     }
-    fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError> {
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
         value.as_bool().copied().map_err(unmatch_err("Bool"))
     }
 }
@@ -270,7 +270,7 @@ macro_rules! impl_to_nums {
                 fn into_attribute_value(self) -> AttributeValue {
                     AttributeValue::N(self.to_string())
                 }
-                fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError> {
+                fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
                     value.as_n()
                         .map_err(unmatch_err("N"))
                         .and_then(|v| v.parse::<$ty>().map_err(|e| e.into()))
@@ -286,23 +286,6 @@ impl_to_nums! {
     f32, f64
 }
 
-impl<T: AttributeValueConvertible> AttributeValueConvertible for Option<T> {
-    fn into_attribute_value(self) -> AttributeValue {
-        self.map(AttributeValueConvertible::into_attribute_value)
-            .unwrap_or(AttributeValue::Null(true))
-    }
-    fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError> {
-        match value {
-            AttributeValue::Null(_) => Ok(None),
-            _ => {
-                let result: Result<T, ConvertError> =
-                    AttributeValueConvertible::try_from_attribute_value(value);
-                result.map(|v| Some(v))
-            }
-        }
-    }
-}
-
 impl<T: AttributeValueConvertible> AttributeValueConvertible for Vec<T> {
     fn into_attribute_value(self) -> AttributeValue {
         AttributeValue::L(
@@ -311,9 +294,9 @@ impl<T: AttributeValueConvertible> AttributeValueConvertible for Vec<T> {
                 .collect(),
         )
     }
-    fn try_from_attribute_value(value: AttributeValue) -> Result<Self, ConvertError> {
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
         let mut values: Vec<T> = vec![];
-        for v in value.as_l().map_err(unmatch_err("L"))?.iter().cloned() {
+        for v in value.as_l().map_err(unmatch_err("L"))?.iter() {
             let v: T = AttributeValueConvertible::try_from_attribute_value(v)?;
             values.push(v);
         }
@@ -338,7 +321,7 @@ mod tests {
     fn string_can_be_converted_from_attribute_value() {
         let value = AttributeValue::S("Hello".into());
         let result: Result<String, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
+            AttributeValueConvertible::try_from_attribute_value(&value);
         assert_eq!(result.unwrap(), "Hello".to_string());
     }
 
@@ -352,55 +335,8 @@ mod tests {
     fn boolean_can_be_converted_from_attribute_value() {
         let value = AttributeValue::Bool(false);
         let result: Result<bool, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
+            AttributeValueConvertible::try_from_attribute_value(&value);
         assert!(!result.unwrap());
-    }
-
-    #[test]
-    fn optional_string_can_be_converted_into_attribute_value() {
-        let value = Some("Hello".to_string());
-        assert_eq!(
-            value.into_attribute_value(),
-            AttributeValue::S("Hello".into())
-        );
-
-        let value: Option<String> = None;
-        assert_eq!(value.into_attribute_value(), AttributeValue::Null(true));
-    }
-
-    #[test]
-    fn optional_string_can_be_converted_from_attribute_value() {
-        let value = AttributeValue::S("Hello".into());
-        let result: Result<Option<String>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
-        assert_eq!(result.unwrap(), Some("Hello".to_string()));
-
-        let value = AttributeValue::Null(true);
-        let result: Result<Option<String>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
-        assert_eq!(result.unwrap(), None);
-    }
-
-    #[test]
-    fn optional_boolean_can_be_converted_into_attribute_value() {
-        let value = Some(false);
-        assert_eq!(value.into_attribute_value(), AttributeValue::Bool(false));
-
-        let value: Option<bool> = None;
-        assert_eq!(value.into_attribute_value(), AttributeValue::Null(true));
-    }
-
-    #[test]
-    fn optional_boolean_can_be_converted_from_attribute_value() {
-        let value = AttributeValue::Bool(true);
-        let result: Result<Option<bool>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
-        assert_eq!(result.unwrap(), Some(true));
-
-        let value = AttributeValue::Null(true);
-        let result: Result<Option<bool>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
-        assert_eq!(result.unwrap(), None);
     }
 
     #[test]
@@ -423,7 +359,7 @@ mod tests {
             AttributeValue::S("World".into()),
         ]);
         let result: Result<Vec<String>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
+            AttributeValueConvertible::try_from_attribute_value(&value);
         assert_eq!(result.unwrap(), expected);
     }
 
@@ -447,7 +383,7 @@ mod tests {
             AttributeValue::Bool(false),
         ]);
         let result: Result<Vec<bool>, ConvertError> =
-            AttributeValueConvertible::try_from_attribute_value(value);
+            AttributeValueConvertible::try_from_attribute_value(&value);
         assert_eq!(result.unwrap(), expected);
     }
 
@@ -465,29 +401,8 @@ mod tests {
                     fn [<$ty _can_be_converted_from_attribute_value>]() {
                         let expected: $ty = 10;
                         let value = AttributeValue::N("10".into());
-                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
+                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
                         assert_eq!(result.unwrap(), expected);
-                    }
-
-                    #[test]
-                    fn [<optional_ $ty _can_be_converted_into_attribute_value>]() {
-                        let value: Option<$ty> = Some(10);
-                        assert_eq!(value.into_attribute_value(), AttributeValue::N("10".into()));
-
-                        let value: Option<$ty> = None;
-                        assert_eq!(value.into_attribute_value(), AttributeValue::Null(true));
-                    }
-
-                    #[test]
-                    fn [<optional_ $ty _can_be_converted_from_attribute_value>]() {
-                        let expected: Option<$ty> = Some(10);
-                        let value = AttributeValue::N("10".into());
-                        let result: Result<Option<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
-                        assert_eq!(result.unwrap(), expected);
-
-                        let value = AttributeValue::Null(true);
-                        let result: Result<Option<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
-                        assert_eq!(result.unwrap(), None);
                     }
 
                     #[test]
@@ -503,7 +418,7 @@ mod tests {
                     fn [<$ty _vector_can_be_converted_from_attribute_value>]() {
                         let expected: Vec<$ty> = vec![10, 20];
                         let value = AttributeValue::L(vec![AttributeValue::N("10".into()), AttributeValue::N("20".into())]);
-                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
+                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
                         assert_eq!(result.unwrap(), expected);
                     }
                 }
@@ -527,29 +442,8 @@ mod tests {
                     fn [<$ty _can_be_converted_from_attribute_value>]() {
                         let expected: $ty = 1.2;
                         let value = AttributeValue::N("1.2".into());
-                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
+                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
                         assert_eq!(result.unwrap(), expected);
-                    }
-
-                    #[test]
-                    fn [<optional_ $ty _can_be_converted_into_attribute_value>]() {
-                        let value: Option<$ty> = Some(1.2);
-                        assert_eq!(value.into_attribute_value(), AttributeValue::N("1.2".into()));
-
-                        let value: Option<$ty> = None;
-                        assert_eq!(value.into_attribute_value(), AttributeValue::Null(true));
-                    }
-
-                    #[test]
-                    fn [<optional_ $ty _can_be_converted_from_attribute_value>]() {
-                        let expected: Option<$ty> = Some(1.2);
-                        let value = AttributeValue::N("1.2".into());
-                        let result: Result<Option<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
-                        assert_eq!(result.unwrap(), expected);
-
-                        let value = AttributeValue::Null(true);
-                        let result: Result<Option<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
-                        assert_eq!(result.unwrap(), None);
                     }
 
                     #[test]
@@ -565,7 +459,7 @@ mod tests {
                     fn [<$ty _vector_can_be_converted_from_attribute_value>]() {
                         let expected: Vec<$ty> = vec![1.2, 3.45];
                         let value = AttributeValue::L(vec![AttributeValue::N("1.2".into()), AttributeValue::N("3.45".into())]);
-                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(value);
+                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
                         assert_eq!(result.unwrap(), expected);
                     }
                 }
