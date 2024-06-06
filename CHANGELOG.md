@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.0][] - 2024-06-07
+
+- Introduce the `AttributeValueConvertible` trait.
+
 ## [0.4.0][] - 2024-06-04
 
 - New-type enum support.
@@ -23,6 +27,7 @@
 
 - pre-release
 
+[0.5.0]: https://github.com/kaicoh/dynamodel/releases/v0.5.0
 [0.4.0]: https://github.com/kaicoh/dynamodel/releases/v0.4.0
 [0.3.1]: https://github.com/kaicoh/dynamodel/releases/v0.3.1
 [0.3.0]: https://github.com/kaicoh/dynamodel/releases/v0.3.0

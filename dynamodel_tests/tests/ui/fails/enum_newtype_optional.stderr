@@ -1,8 +1,0 @@
-error: newtype variant with optional is not supported.
-
-         = note: You cannot use tagged newtype variant containing an optional.
-
- --> tests/ui/fails/enum_newtype_optional.rs:5:9
-  |
-5 |     Str(Option<String>),
-  |         ^^^^^^

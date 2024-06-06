@@ -1,6 +1,5 @@
 mod case;
 mod types;
-mod utils;
 
 use case::RenameRule;
 use darling::FromDeriveInput;
@@ -82,6 +81,18 @@ impl TargetStruct {
 
                 fn try_from(item: ::std::collections::HashMap<String, ::aws_sdk_dynamodb::types::AttributeValue>) -> ::std::result::Result<Self, Self::Error> {
                     #try_from_impl
+                }
+            }
+
+            impl #imp ::dynamodel::AttributeValueConvertible for #ident #ty #whr {
+                fn into_attribute_value(self) -> ::aws_sdk_dynamodb::types::AttributeValue {
+                    ::aws_sdk_dynamodb::types::AttributeValue::M(self.into())
+                }
+
+                fn try_from_attribute_value(value: &::aws_sdk_dynamodb::types::AttributeValue) -> ::std::result::Result<Self, ::dynamodel::ConvertError> {
+                    value.as_m()
+                        .map_err(|e| ::dynamodel::ConvertError::AttributeValueUnmatched("M".into(), e.clone()))
+                        .and_then(|item| Self::try_from(item.clone()))
                 }
             }
         }.into()
