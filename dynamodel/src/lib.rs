@@ -3,6 +3,47 @@
 //! This library provides a derive macro to implement conversions between your object and
 //! [HashMap](std::collections::HashMap)<[String], [AttributeValue]>.
 //!
+//! ## Derive macro [`Dynamodel`]
+//!
+//! The [`Dynamodel`] derive macro implements these three traits to use
+//! [`aws-sdk-dynamodb`](https://crates.io/crates/aws-sdk-dynamodb) more comfortably.
+//!
+//! * `Into<HashMap<String, AttributeValue>>`
+//! * `TryFrom<HashMap<String, AttributeValue>>`
+//! * The [`AttributeValueConvertible`] trait enables the types that implement it to be converted from and to `AttributeValue`.
+//!
+//! ```ignore
+//! #[derive(Dynamodel)]        Convertible
+//! struct YourStruct { ... }  <===========>  HashMap<String, AttributeValue>
+//!
+//! #[derive(Dynamodel)]    Convertible
+//! enum YourEnum { ... }  <===========>  HashMap<String, AttributeValue>
+//! ```
+//!
+//! ### Requirements to use [`Dynamodel`]
+//!
+//! To use the [`Dynamodel`] macro, all types of your object's fields must implement
+//! the `AttributeValueConvertible` trait.
+//!
+//! By default, these types automatically implement the [`AttributeValueConvertible`]
+//! trait, so no additional code is required when using these types.
+//!
+//! | Type | `AttributeValue` variant |
+//! |---|---|
+//! | `String` | `AttributeValue::S("...")` |
+//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N("...")` |
+//! | `bool` | `AttributeValue::Bool(...)` |
+//! | `Vec` of any types that implement `AttributeValueConvertible` | `AttributeValue::L([...])` |
+//! | Any types that implement `Dynamodel` macro | `AttributeValue::M({ ... })` |
+//!
+//! The last row of the above table shows that once you apply the [`Dynamodel`] macro to your object,
+//! it also implements the [`AttributeValueConvertible`] trait for your object.
+//!
+//! **So, you can create nested structures of objects that apply the [`Dynamodel`] macro.**
+//!
+//! If you want to use additional types, you need to implement the `AttributeValueConvertible`
+//! trait for your type.
+//!
 //! ## Usage
 //!
 //! ```rust
@@ -10,9 +51,6 @@
 //! # use std::collections::HashMap;
 //! # use aws_sdk_dynamodb::types::AttributeValue;
 //!
-//! // Using `Dynamodel` macro, you can implement both
-//! // `From<your struct> for HashMap<String, AttributeValue>` and
-//! // `TryFrom<HashMap<String, AttributeValue>> for your struct` traits.
 //! #[derive(Dynamodel, Debug, Clone, PartialEq)]
 //! struct Person {
 //!     first_name: String,
@@ -42,23 +80,10 @@
 //! assert_eq!(converted, person);
 //! ```
 //!
-//! ## Implicit conversion
+//! ### Modifying the default behavior
 //!
-//! This macro implicitly converts some types, so you don't have to add any code. The types are
-//! as follows.
-//!
-//! | Type | AttributeValue variant | Condition |
-//! |---|---|---|
-//! | `String` | `AttributeValue::S` | none |
-//! | `u8, u16, u32, u64, u128, usize`<br>`i8, i16, i32, i64, i128, isize`<br>`f32, f64` | `AttributeValue::N` | none |
-//! | `bool` | `AttributeValue::Bool` | none |
-//! | Any structs or enums | `AttributeValue::M` | must implement both<br>`Into<HashMap<String, AttributeValue>>`<br>and<br>`TryFrom<HashMap<String, AttributeValue>, Error = ConvertError>` |
-//! | `Vec<inner type>` | `AttributeValue::L` | the inner type must be one of the implicit conversion types. |
-//! | `Option<inner type>` | Depends on the inner type | the inner type must be one of the implicit conversion types. |
-//!
-//! ## Explicit conversion
-//!
-//! Using the field attribute, you can implement custom conversion methods for any type like this.
+//! Like the [`Serde`](https://crates.io/crates/serde) crate, you can modify the default behavior
+//! through attributes like this.
 //!
 //! ```rust
 //! use dynamodel::{Dynamodel, ConvertError};
@@ -227,4 +252,245 @@ pub enum ConvertError {
     /// You can wrap your original errors in this variant.
     #[error(transparent)]
     Other(Box<dyn std::error::Error + Send + Sync>),
+}
+
+fn unmatch_err(expected: &str) -> impl Fn(&AttributeValue) -> ConvertError + '_ {
+    |value: &AttributeValue| {
+        ConvertError::AttributeValueUnmatched(expected.to_string(), value.to_owned())
+    }
+}
+
+/// Types that implement this trait on objects with the [`Dynamodel`] macro can be
+/// implicitly converted from and into [`AttributeValue`].
+pub trait AttributeValueConvertible: Sized {
+    fn into_attribute_value(self) -> AttributeValue;
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError>;
+}
+
+impl AttributeValueConvertible for String {
+    fn into_attribute_value(self) -> AttributeValue {
+        AttributeValue::S(self)
+    }
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
+        value
+            .as_s()
+            .map(|v| v.to_string())
+            .map_err(unmatch_err("S"))
+    }
+}
+
+impl AttributeValueConvertible for bool {
+    fn into_attribute_value(self) -> AttributeValue {
+        AttributeValue::Bool(self)
+    }
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
+        value.as_bool().copied().map_err(unmatch_err("Bool"))
+    }
+}
+
+macro_rules! impl_to_nums {
+    ($($ty:ty),*) => {
+        $(
+            impl AttributeValueConvertible for $ty {
+                fn into_attribute_value(self) -> AttributeValue {
+                    AttributeValue::N(self.to_string())
+                }
+                fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
+                    value.as_n()
+                        .map_err(unmatch_err("N"))
+                        .and_then(|v| v.parse::<$ty>().map_err(|e| e.into()))
+                }
+            }
+         )*
+    }
+}
+
+impl_to_nums! {
+    u8, u16, u32, u64, u128, usize,
+    i8, i16, i32, i64, i128, isize,
+    f32, f64
+}
+
+impl<T: AttributeValueConvertible> AttributeValueConvertible for Vec<T> {
+    fn into_attribute_value(self) -> AttributeValue {
+        AttributeValue::L(
+            self.into_iter()
+                .map(AttributeValueConvertible::into_attribute_value)
+                .collect(),
+        )
+    }
+    fn try_from_attribute_value(value: &AttributeValue) -> Result<Self, ConvertError> {
+        let mut values: Vec<T> = vec![];
+        for v in value.as_l().map_err(unmatch_err("L"))?.iter() {
+            let v: T = AttributeValueConvertible::try_from_attribute_value(v)?;
+            values.push(v);
+        }
+        Ok(values)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn string_can_be_converted_into_attribute_value() {
+        let value = "Hello".to_string();
+        assert_eq!(
+            value.into_attribute_value(),
+            AttributeValue::S("Hello".into())
+        );
+    }
+
+    #[test]
+    fn string_can_be_converted_from_attribute_value() {
+        let value = AttributeValue::S("Hello".into());
+        let result: Result<String, ConvertError> =
+            AttributeValueConvertible::try_from_attribute_value(&value);
+        assert_eq!(result.unwrap(), "Hello".to_string());
+    }
+
+    #[test]
+    fn boolean_can_be_converted_into_attribute_value() {
+        let value = true;
+        assert_eq!(value.into_attribute_value(), AttributeValue::Bool(true));
+    }
+
+    #[test]
+    fn boolean_can_be_converted_from_attribute_value() {
+        let value = AttributeValue::Bool(false);
+        let result: Result<bool, ConvertError> =
+            AttributeValueConvertible::try_from_attribute_value(&value);
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn string_vector_can_be_converted_into_attribute_value() {
+        let value = vec!["Hello".to_string(), "World".to_string()];
+        assert_eq!(
+            value.into_attribute_value(),
+            AttributeValue::L(vec![
+                AttributeValue::S("Hello".into()),
+                AttributeValue::S("World".into())
+            ]),
+        );
+    }
+
+    #[test]
+    fn string_vector_can_be_converted_from_attribute_value() {
+        let expected = vec!["Hello".to_string(), "World".to_string()];
+        let value = AttributeValue::L(vec![
+            AttributeValue::S("Hello".into()),
+            AttributeValue::S("World".into()),
+        ]);
+        let result: Result<Vec<String>, ConvertError> =
+            AttributeValueConvertible::try_from_attribute_value(&value);
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    #[test]
+    fn boolean_vector_can_be_converted_into_attribute_value() {
+        let value = vec![true, false];
+        assert_eq!(
+            value.into_attribute_value(),
+            AttributeValue::L(vec![
+                AttributeValue::Bool(true),
+                AttributeValue::Bool(false)
+            ]),
+        );
+    }
+
+    #[test]
+    fn boolean_vector_can_be_converted_from_attribute_value() {
+        let expected = vec![true, false];
+        let value = AttributeValue::L(vec![
+            AttributeValue::Bool(true),
+            AttributeValue::Bool(false),
+        ]);
+        let result: Result<Vec<bool>, ConvertError> =
+            AttributeValueConvertible::try_from_attribute_value(&value);
+        assert_eq!(result.unwrap(), expected);
+    }
+
+    macro_rules! test_int {
+        ($($ty:ty),*) => {
+            $(
+                paste::item! {
+                    #[test]
+                    fn [<$ty _can_be_converted_into_attribute_value>]() {
+                        let value: $ty = 10;
+                        assert_eq!(value.into_attribute_value(), AttributeValue::N("10".into()));
+                    }
+
+                    #[test]
+                    fn [<$ty _can_be_converted_from_attribute_value>]() {
+                        let expected: $ty = 10;
+                        let value = AttributeValue::N("10".into());
+                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
+                        assert_eq!(result.unwrap(), expected);
+                    }
+
+                    #[test]
+                    fn [<$ty _vector_can_be_converted_into_attribute_value>]() {
+                        let value: Vec<$ty> = vec![10, 20];
+                        assert_eq!(
+                            value.into_attribute_value(),
+                            AttributeValue::L(vec![AttributeValue::N("10".into()), AttributeValue::N("20".into())]),
+                        );
+                    }
+
+                    #[test]
+                    fn [<$ty _vector_can_be_converted_from_attribute_value>]() {
+                        let expected: Vec<$ty> = vec![10, 20];
+                        let value = AttributeValue::L(vec![AttributeValue::N("10".into()), AttributeValue::N("20".into())]);
+                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
+                        assert_eq!(result.unwrap(), expected);
+                    }
+                }
+            )*
+        }
+    }
+
+    test_int! { u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize }
+
+    macro_rules! test_float {
+        ($($ty:ty),*) => {
+            $(
+                paste::item! {
+                    #[test]
+                    fn [<$ty _can_be_converted_into_attribute_value>]() {
+                        let value: $ty = 1.2;
+                        assert_eq!(value.into_attribute_value(), AttributeValue::N("1.2".into()));
+                    }
+
+                    #[test]
+                    fn [<$ty _can_be_converted_from_attribute_value>]() {
+                        let expected: $ty = 1.2;
+                        let value = AttributeValue::N("1.2".into());
+                        let result: Result<$ty, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
+                        assert_eq!(result.unwrap(), expected);
+                    }
+
+                    #[test]
+                    fn [<$ty _vector_can_be_converted_into_attribute_value>]() {
+                        let value: Vec<$ty> = vec![1.2, 3.45];
+                        assert_eq!(
+                            value.into_attribute_value(),
+                            AttributeValue::L(vec![AttributeValue::N("1.2".into()), AttributeValue::N("3.45".into())]),
+                        );
+                    }
+
+                    #[test]
+                    fn [<$ty _vector_can_be_converted_from_attribute_value>]() {
+                        let expected: Vec<$ty> = vec![1.2, 3.45];
+                        let value = AttributeValue::L(vec![AttributeValue::N("1.2".into()), AttributeValue::N("3.45".into())]);
+                        let result: Result<Vec<$ty>, ConvertError> = AttributeValueConvertible::try_from_attribute_value(&value);
+                        assert_eq!(result.unwrap(), expected);
+                    }
+                }
+            )*
+        }
+    }
+
+    test_float! { f32, f64 }
 }

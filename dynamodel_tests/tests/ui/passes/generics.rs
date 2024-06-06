@@ -1,22 +1,12 @@
-use dynamodel::{Dynamodel, ConvertError};
-use aws_sdk_dynamodb::types::AttributeValue;
-use std::collections::HashMap;
-
-type H = HashMap<String, AttributeValue>;
+use dynamodel::{AttributeValueConvertible, Dynamodel};
 
 #[derive(Dynamodel)]
-struct ExampleStruct<T>
-where
-    T: Into<H> + TryFrom<H, Error = ConvertError>,
-{
+struct ExampleStruct<T: AttributeValueConvertible> {
     attr: T,
 }
 
 #[derive(Dynamodel)]
-enum ExampleEnum<T>
-where
-    T: Into<H> + TryFrom<H, Error = ConvertError>,
-{
+enum ExampleEnum<T: AttributeValueConvertible> {
     A { attr: T },
     B { attr: String },
 }

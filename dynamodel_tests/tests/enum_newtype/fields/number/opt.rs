@@ -1,0 +1,183 @@
+use super::*;
+
+macro_rules!  int_test {
+    ($($ty:ty),*) => {
+        $(
+            paste::item! {
+                #[derive(Dynamodel, Debug, PartialEq)]
+                enum [<NewType$ty>] {
+                    Num(Option<$ty>),
+                }
+
+                #[test]
+                fn [<test_ $ty _into_hashmap>]() {
+                    let val = [<NewType$ty>]::Num(Some(10));
+                    let actual: HashMap<String, AttributeValue> = val.into();
+
+                    let expected: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::N("10".into())),
+                    ]
+                    .into();
+
+                    assert_eq!(actual, expected);
+
+                    let val = [<NewType$ty>]::Num(None);
+                    let actual: HashMap<String, AttributeValue> = val.into();
+
+                    let expected: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::Null(true)),
+                    ]
+                    .into();
+
+                    assert_eq!(actual, expected);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap>]() {
+                    let expected = [<NewType$ty>]::Num(Some(10));
+
+                    let item: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::N("10".into())),
+                    ]
+                    .into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_ok_eq!(actual, expected);
+
+                    let expected = [<NewType$ty>]::Num(None);
+
+                    let item: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::Null(true)),
+                    ]
+                    .into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_ok_eq!(actual, expected);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_variant_not_found>]() {
+                    let item: HashMap<String, AttributeValue> = HashMap::new();
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_variant_not_found!(actual);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_unmatched_attribute_value>]() {
+                    let item: HashMap<String, AttributeValue> =
+                        [("Num".to_string(), AttributeValue::S("foo".into()))].into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_attribute_unmatch!(actual, "N");
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_parse_err>]() {
+                    let item: HashMap<String, AttributeValue> =
+                        [("Num".to_string(), AttributeValue::N("foo".into()))].into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_parse_int!(actual);
+                }
+            }
+        )*
+    }
+}
+
+int_test!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
+
+macro_rules!  float_test {
+    ($($ty:ty),*) => {
+        $(
+            paste::item! {
+                #[derive(Dynamodel, Debug, PartialEq)]
+                enum [<NewType$ty>] {
+                    Num(Option<$ty>),
+                }
+
+                #[test]
+                fn [<test_ $ty _into_hashmap>]() {
+                    let val = [<NewType$ty>]::Num(Some(1.2));
+                    let actual: HashMap<String, AttributeValue> = val.into();
+
+                    let expected: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::N("1.2".into())),
+                    ]
+                    .into();
+
+                    assert_eq!(actual, expected);
+
+                    let val = [<NewType$ty>]::Num(None);
+                    let actual: HashMap<String, AttributeValue> = val.into();
+
+                    let expected: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::Null(true)),
+                    ]
+                    .into();
+
+                    assert_eq!(actual, expected);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap>]() {
+                    let expected = [<NewType$ty>]::Num(Some(1.2));
+
+                    let item: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::N("1.2".into())),
+                    ]
+                    .into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_ok_eq!(actual, expected);
+
+                    let expected = [<NewType$ty>]::Num(None);
+
+                    let item: HashMap<String, AttributeValue> = [
+                        ("Num".to_string(), AttributeValue::Null(true)),
+                    ]
+                    .into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_ok_eq!(actual, expected);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_variant_not_found>]() {
+                    let item: HashMap<String, AttributeValue> = HashMap::new();
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_variant_not_found!(actual);
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_unmatched_attribute_value>]() {
+                    let item: HashMap<String, AttributeValue> =
+                        [("Num".to_string(), AttributeValue::S("foo".into()))].into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_attribute_unmatch!(actual, "N");
+                }
+
+                #[test]
+                fn [<test_ $ty _try_from_hashmap_parse_err>]() {
+                    let item: HashMap<String, AttributeValue> =
+                        [("Num".to_string(), AttributeValue::N("foo".into()))].into();
+
+                    let actual = [<NewType$ty>]::try_from(item);
+
+                    assert_parse_float!(actual);
+                }
+            }
+        )*
+    }
+}
+
+float_test!(f32, f64);
