@@ -128,13 +128,9 @@ impl TargetStruct {
             .map(|f| f.into_named(&rename_rule))
             .collect();
 
-        let set_key_values = fields.iter().filter_map(|f| {
-            if f.skip_into() {
-                None
-            } else {
-                Some(f.set_key_value_pair_token(|v| quote!(value.#v)))
-            }
-        });
+        let set_key_values = fields
+            .iter()
+            .filter_map(|f| f.set_key_value_pair_token(|v| quote!(value.#v)));
 
         let set_named_fields = fields.iter().map(NamedField::set_named_field_token);
 

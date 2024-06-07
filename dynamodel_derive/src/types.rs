@@ -71,7 +71,7 @@ impl NamedField {
         }
     }
 
-    pub fn set_key_value_pair_token<T>(&self, get_value: T) -> TokenStream
+    fn set_key_value_pairs<T>(&self, get_value: T) -> TokenStream
     where
         T: Fn(&Option<syn::Ident>) -> TokenStream,
     {
@@ -106,6 +106,17 @@ impl NamedField {
                     ::dynamodel::AttributeValueConvertible::into_attribute_value(v),
                 );
             }
+        }
+    }
+
+    pub fn set_key_value_pair_token<T>(&self, get_value: T) -> Option<TokenStream>
+    where
+        T: Fn(&Option<syn::Ident>) -> TokenStream,
+    {
+        if self.skip_into() {
+            None
+        } else {
+            Some(self.set_key_value_pairs(get_value))
         }
     }
 }
@@ -186,7 +197,7 @@ impl NamedVariant {
         let field_names = fields.iter().map(NamedField::ident);
         let set_key_values = fields
             .iter()
-            .map(|f| f.set_key_value_pair_token(|v| quote!(#v)));
+            .filter_map(|f| f.set_key_value_pair_token(|v| quote!(#v)));
 
         quote! {
             #ident { #(#field_names,)* } => {

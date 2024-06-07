@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.1][] - 2024-06-07
+
+- Fix bug: `skip_into` attribute on named enums not working.
+
 ## [0.5.0][] - 2024-06-07
 
 - Introduce the `AttributeValueConvertible` trait.
@@ -27,6 +31,7 @@
 
 - pre-release
 
+[0.5.1]: https://github.com/kaicoh/dynamodel/releases/v0.5.1
 [0.5.0]: https://github.com/kaicoh/dynamodel/releases/v0.5.0
 [0.4.0]: https://github.com/kaicoh/dynamodel/releases/v0.4.0
 [0.3.1]: https://github.com/kaicoh/dynamodel/releases/v0.3.1
