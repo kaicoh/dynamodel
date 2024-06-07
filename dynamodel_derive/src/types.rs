@@ -408,12 +408,6 @@ pub struct Variant {
     pub rename_all: Option<syn::Lit>,
 }
 
-impl ToTokens for Variant {
-    fn to_tokens(&self, tokens: &mut TokenStream) {
-        self.ident.to_tokens(tokens)
-    }
-}
-
 impl Variant {
     pub fn validate(&self) {
         for field in self.fields.fields.iter() {
