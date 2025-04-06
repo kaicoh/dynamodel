@@ -1,6 +1,6 @@
 [package]
 name = "dynamodel_derive"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Kanji Tanaka <sumireminami@gmail.com"]
 license = "MIT"
 description = "Macros 1.1 implementation of #[derive(Dynamodel)]"
@@ -8,7 +8,7 @@ homepage = "https://github.com/kaicoh/dynamodel"
 repository = "https://github.com/kaicoh/dynamodel"
 documentation = "https://docs.rs/dynamodel"
 keywords = ["dynamodb", "aws", "derive"]
-edition = "2021"
+edition = "2024"
 readme = "../README.md"
 
 [lib]

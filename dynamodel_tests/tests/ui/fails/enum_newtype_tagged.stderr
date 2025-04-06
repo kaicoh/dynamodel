@@ -2,9 +2,10 @@ error[E0277]: the trait bound `HashMap<String, AttributeValue>: From<String>` is
  --> tests/ui/fails/enum_newtype_tagged.rs:3:10
   |
 3 | #[derive(Dynamodel)]
-  |          ^^^^^^^^^ the trait `From<String>` is not implemented for `HashMap<String, AttributeValue>`, which is required by `String: Into<_>`
+  |          ^^^^^^^^^ the trait `From<String>` is not implemented for `HashMap<String, AttributeValue>`
   |
-  = help: the trait `From<NewType>` is implemented for `HashMap<String, AttributeValue>`
+  = help: the trait `From<String>` is not implemented for `HashMap<String, AttributeValue>`
+          but trait `From<NewType>` is implemented for it
   = help: for that trait implementation, expected `NewType`, found `String`
   = note: required for `String` to implement `Into<HashMap<String, AttributeValue>>`
   = note: this error originates in the derive macro `Dynamodel` (in Nightly builds, run with -Z macro-backtrace for more info)

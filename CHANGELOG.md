@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.6.0][] - 2025-04-06
+
+- Rust 2024.
+
 ## [0.5.1][] - 2024-06-07
 
 - Fix bug: `skip_into` attribute on named enums not working.
@@ -31,6 +35,7 @@
 
 - pre-release
 
+[0.6.0]: https://github.com/kaicoh/dynamodel/releases/v0.6.0
 [0.5.1]: https://github.com/kaicoh/dynamodel/releases/v0.5.1
 [0.5.0]: https://github.com/kaicoh/dynamodel/releases/v0.5.0
 [0.4.0]: https://github.com/kaicoh/dynamodel/releases/v0.4.0

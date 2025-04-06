@@ -29,7 +29,7 @@ fn get_timestamp(item: &HashMap<String, AttributeValue>) -> Result<String, Conve
             v.as_s()
                 .map_err(|e| ConvertError::AttributeValueUnmatched("S".into(), e.clone()))
         })
-        .map(|v| v.split('#').last().unwrap().to_string())
+        .map(|v| v.split('#').next_back().unwrap().to_string())
 }
 
 #[test]
