@@ -122,11 +122,10 @@ impl NamedField {
 }
 
 #[derive(Debug, FromField, Clone)]
-#[darling(attributes(dynamodel))]
+#[darling(attributes(dynamodel), forward_attrs)]
 pub struct Field {
     pub ident: Option<syn::Ident>,
     pub ty: syn::Type,
-    pub attrs: Vec<syn::Attribute>,
     pub into: Option<syn::Expr>,
     pub try_from: Option<syn::Expr>,
     pub rename: Option<String>,
@@ -410,10 +409,9 @@ impl NamedVariant {
 }
 
 #[derive(Debug, FromVariant, Clone)]
-#[darling(attributes(dynamodel))]
+#[darling(attributes(dynamodel), forward_attrs)]
 pub struct Variant {
     pub ident: syn::Ident,
-    pub attrs: Vec<syn::Attribute>,
     pub fields: darling::ast::Fields<Field>,
     pub rename: Option<String>,
     pub rename_all: Option<syn::Lit>,
